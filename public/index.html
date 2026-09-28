@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LilyPond Workspace — auto preview PNG / PDF / MIDI</title>
+<link rel="stylesheet" href="/style.css" />
+<script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/focus-visible@5,npm/html-midi-player@1.4.0"></script>
+</head>
+<body>
+<header>
+  <div>
+    <h1>LilyPond Workspace<span class="brand-dot">.</span></h1>
+    <p id="version">checking lilypond…</p>
+  </div>
+  <div class="header-actions">
+    <label class="auto"><input type="checkbox" id="auto" checked /> auto-preview</label>
+    <span id="status" class="status idle" aria-live="polite">idle</span>
+  </div>
+</header>
+
+<main>
+  <section class="editor-pane">
+    <div class="toolbar">
+      <select id="fileSelect" title="Workspace file"></select>
+      <button id="newBtn" title="New file">+ New</button>
+      <button id="saveBtn" title="Save to workspace/*.ly">Save</button>
+      <button id="compileBtn" class="primary">Compile ▶</button>
+    </div>
+    <textarea id="editor" spellcheck="false" placeholder="Type LilyPond code here…"></textarea>
+    <details open>
+      <summary>Compiler log</summary>
+      <pre id="log">Press Compile or type (auto-preview on).</pre>
+    </details>
+    <p class="hint">Tip: also edit <code>workspace/*.ly</code> in your own editor — the server watches, recompiles on save, and pushes the result here.</p>
+    <div class="follow-row">
+      <label><input type="checkbox" id="follow" checked /> follow file (auto-reload on save)</label>
+      <label><input type="checkbox" id="autoplay" checked /> auto-play MIDI on save</label>
+    </div>
+    <div id="watchNotice" class="watch" hidden></div>
+  </section>
+
+  <div id="splitter" role="separator" aria-orientation="vertical" aria-label="Resize editor and preview panels" tabindex="0" title="Drag to resize (double-click to reset)"></div>
+
+  <section class="preview-pane">
+    <div id="errorBanner" class="error-banner" hidden role="alert" tabindex="-1"></div>
+    <nav class="tabs">
+      <button data-tab="png" class="active">PNG score</button>
+      <button data-tab="pdf">PDF</button>
+      <button data-tab="midi">MIDI audio</button>
+      <span id="staleChip" class="chip warn" hidden>showing last good version</span>
+    </nav>
+
+    <div id="tab-png" class="tab active">
+      <div class="dl"><a id="dlPng" href="#" download="preview.png">Download PNG</a>
+        <label class="op">Score opacity <input type="range" id="pngOp" min="0" max="1" step="0.01" value="1" /> <span id="pngOpVal">100%</span></label>
+      </div>
+      <div id="pngWrap" class="png-wrap"><p class="empty">No render yet.</p></div>
+    </div>
+
+    <div id="tab-pdf" class="tab">
+      <div class="dl"><a id="dlPdf" href="#" download="preview.pdf">Download PDF</a>
+        <label class="op">PDF opacity <input type="range" id="pdfOp" min="0" max="1" step="0.01" value="1" /> <span id="pdfOpVal">100%</span></label>
+      </div>
+      <iframe id="pdfFrame" title="PDF preview"></iframe>
+    </div>
+
+    <div id="tab-midi" class="tab">
+      <div class="dl"><a id="dlMidi" href="#" download="preview.midi">Download MIDI</a></div>
+      <div id="midiBox">
+        <midi-player id="midiPlayer" sound-font></midi-player>
+        <midi-visualizer id="midiViz" type="piano-roll"></midi-visualizer>
+        <p id="noMidi" class="empty">No MIDI yet — add a <code>\midi { }</code> block to your <code>\score</code>.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

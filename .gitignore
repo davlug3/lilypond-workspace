@@ -1,0 +1,6 @@
+node_modules/
+public/preview.*
+public/preview-*.png
+public/auto.*
+*.log
+.DS_Store
