@@ -6,6 +6,12 @@
 <title>LilyPond Workspace — auto preview PNG / PDF / MIDI</title>
 <link rel="stylesheet" href="/style.css" />
 <script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/focus-visible@5,npm/html-midi-player@1.4.0"></script>
+<script type="importmap">
+{ "imports": {
+  "spessasynth_lib": "https://cdn.jsdelivr.net/npm/spessasynth_lib@4.3.14/dist/index.js",
+  "spessasynth_core": "https://cdn.jsdelivr.net/npm/spessasynth_core@4.3.22/dist/index.js"
+} }
+</script>
 </head>
 <body>
 <header>
@@ -67,11 +73,25 @@
 
     <div id="tab-midi" class="tab">
       <div class="dl"><a id="dlMidi" href="#" download="preview.midi">Download MIDI</a>
-        <label class="op">Sound
-          <select id="sfSelect" title="SoundFont: Salamander is piano-only; General MIDI covers all instruments">
+        <label class="op">Engine
+          <select id="engineSelect" title="Magenta plays small streamed samples; SF2 loads full sound banks">
+            <option value="magenta">Magenta</option>
+            <option value="sf2">SF2 (SpessaSynth)</option>
+          </select>
+        </label>
+        <label class="op" id="magentaSfWrap">Sound
+          <select id="sfSelect" title="SoundFont: Salamander is piano-only, Jazz Kit is drums-only, General MIDI covers all instruments">
             <option value="sgm">General MIDI (default)</option>
             <option value="salamander">Salamander grand piano</option>
+            <option value="jazz">Jazz Kit drums</option>
             <option value="synth">Simple synth (offline)</option>
+          </select>
+        </label>
+        <label class="op" id="sf2Wrap" hidden>Bank
+          <select id="sf2Select" title="SF2 bank: GeneralUser covers all instruments; upload your own for more">
+            <option value="generaluser">GeneralUser GS (~8 MB)</option>
+            <option value="custom">Uploaded file…</option>
+            <option value="url">Custom URL…</option>
           </select>
         </label>
       </div>
@@ -80,10 +100,26 @@
         <midi-visualizer id="midiViz" type="piano-roll"></midi-visualizer>
         <p id="noMidi" class="empty">No MIDI yet — add a <code>\midi { }</code> block to your <code>\score</code>.</p>
       </div>
+      <div id="sf2Box" hidden>
+        <div class="sf2-controls">
+          <button id="sf2Play" type="button">Play</button>
+          <button id="sf2Pause" type="button">Pause</button>
+          <button id="sf2Stop" type="button">Stop</button>
+          <input type="range" id="sf2Seek" min="0" max="1000" value="0" title="Seek" />
+          <span id="sf2Time" class="mono">0:00 / 0:00</span>
+        </div>
+        <div class="sf2-load">
+          <input type="file" id="sf2File" accept=".sf2,.sf3,.dls,.sfogg" hidden />
+          <input type="url" id="sf2Url" placeholder="https://…/bank.sf2 or .sf3" hidden />
+          <button id="sf2LoadBtn" type="button" hidden>Load bank</button>
+        </div>
+        <p id="sf2Status" class="empty" aria-live="polite">SF2 engine idle — pick Play after a compile, or load a bank.</p>
+      </div>
     </div>
   </section>
 </main>
 
 <script src="/app.js"></script>
+<script type="module" src="/sf2-player.js"></script>
 </body>
 </html>

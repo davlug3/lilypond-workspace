@@ -27,7 +27,7 @@ Requires `lilypond` on PATH (you have 2.22.2). Check: `lilypond --version`.
     The server debounces saves (~300 ms), recompiles server-side, republishes
     `public/preview.*`, and broadcasts the result. Latest save wins. (Native
     `fs.watch`; no extra watcher dependency.)
-- `public/index.html|app.js|style.css` — editor + preview UI:
+- `public/index.html|app.js|sf2-player.js|style.css` — editor + preview UI:
   - textarea editor, debounced (800 ms) auto-compile when `auto-preview` is on.
   - Tabs: **PNG score** (`<img>`), **PDF** (`<iframe>`), **MIDI audio**
     (`<midi-player>` + `<midi-visualizer>` from `html-midi-player`, Tone.js soundfont — no server audio conversion needed).
@@ -37,11 +37,18 @@ Requires `lilypond` on PATH (you have 2.22.2). Check: `lilypond --version`.
     range, double-click to reset 50/50, arrow keys when focused). Position
     persists in `localStorage`. On narrow screens the panes stack and the
     divider hides.
-  - **SoundFont picker**: the MIDI tab offers General MIDI (default, all
-    instruments), Salamander grand piano (piano-only — other staves go
-    silent), and a simple offline synth. Choice persists in `localStorage`;
-    switching stops playback, reloads current MIDI with the new samples, and
-    resumes if it was playing.
+  - **Playback engines + soundfonts**: the MIDI tab offers two engines (choice
+    persists in `localStorage`).
+    - *Magenta* (default): General MIDI (all instruments), Salamander grand
+      piano (piano-only), Jazz Kit drums (drums-only), and an offline simple
+      synth. Small streamed samples, no download wait.
+    - *SF2 (SpessaSynth)*: full SoundFont banks — bundled GeneralUser GS
+      (~8 MB, all instruments), any uploaded `.sf2`/`.sf3`/`.dls` file, or a
+      custom bank URL. Banks are downloaded once, then cached. Play / Pause /
+      Stop + seek bar included. Add more built-in banks with one line each in
+      `SF2_BANKS` (`public/sf2-player.js`).
+    Switching engines stops the other so they never overlap; autoplay-on-save
+    follows the active engine.
   - **Theme**: clean light studio (neutral grays, single blue accent, system
     type), dark mode follows the OS. All text pairs contrast-checked ≥4.5:1
     in both themes (computed), score/PDF stay on paper white, error banner
@@ -72,7 +79,9 @@ Requires `lilypond` on PATH (you have 2.22.2). Check: `lilypond --version`.
 ## MIDI preview notes
 
 Browsers can't play `.mid` natively, so the page uses the `html-midi-player`
-web component (CDN). For MIDI output you need a `\midi { }` block in your `\score`,
+web component (CDN) for the Magenta engine and `spessasynth_lib` (CDN,
+pinned in the `importmap` in `public/index.html`) for the SF2 engine.
+For MIDI output you need a `\midi { }` block in your `\score`,
 e.g. `workspace/scale-midi.ly`. Without it, the MIDI tab shows "No MIDI yet" — expected.
 
 ## Project layout

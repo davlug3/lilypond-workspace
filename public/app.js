@@ -326,9 +326,13 @@ function safeStart() {
 
 // Fetch the new MIDI fully before touching the player, so the swap is instant;
 // the staged version then cuts in immediately (autoplay on) or on next Play.
+// In SF2 mode the MIDI is handed to the SpessaSynth engine instead (event-driven,
+// so it works even if the SF2 module is still loading).
 async function updateMidiNeatly(url) {
-  const gen = ++midiGen;
   dlMidi.href = url;
+  window.dispatchEvent(new CustomEvent("lily:midi", { detail: { url } }));
+  if (getEngine() === "sf2") return;
+  const gen = ++midiGen;
   let blobUrl = url;
   if (!url.startsWith("data:")) {
     try {
@@ -370,6 +374,7 @@ function swapStagedMidi(shouldStart) {
 function clearMidi() {
   midiGen++;
   pendingMidi = null;
+  window.dispatchEvent(new CustomEvent("lily:midi-clear"));
   noMidi.hidden = false;
   try { midiPlayer.removeAttribute("src"); } catch (_) {}
   try { midiViz.removeAttribute("src"); } catch (_) {}
@@ -379,6 +384,7 @@ function clearMidi() {
 const SF_SETS = {
   sgm: { label: "General MIDI", url: "" },
   salamander: { label: "Salamander grand piano", url: "https://storage.googleapis.com/magentadata/js/soundfonts/salamander" },
+  jazz: { label: "Jazz Kit drums", url: "https://storage.googleapis.com/magentadata/js/soundfonts/jazz_kit" },
   synth: { label: "Simple synth", url: null },
 };
 const SF_KEY = "lily-soundfont";
@@ -427,6 +433,53 @@ function applySoundFont(key) {
   midiPlayer.src = cur;
 }
 if (sfSelect) sfSelect.addEventListener("change", () => applySoundFont(sfSelect.value));
+
+// ---- Playback engine: Magenta (streamed samples) vs SF2 (SpessaSynth banks) ----
+const ENGINE_KEY = "lily-engine";
+const engineSelect = $("engineSelect");
+const midiBox = $("midiBox");
+const sf2Box = $("sf2Box");
+const magentaSfWrap = $("magentaSfWrap");
+const sf2Wrap = $("sf2Wrap");
+
+function getEngine() {
+  return engineSelect && engineSelect.value === "sf2" ? "sf2" : "magenta";
+}
+
+function applyEngineUI() {
+  const sf2 = getEngine() === "sf2";
+  if (midiBox) midiBox.hidden = sf2;
+  if (sf2Box) sf2Box.hidden = !sf2;
+  if (magentaSfWrap) magentaSfWrap.hidden = sf2;
+  if (sf2Wrap) sf2Wrap.hidden = !sf2;
+}
+
+function loadEngine() {
+  let e = "magenta";
+  try {
+    const saved = localStorage.getItem(ENGINE_KEY);
+    if (saved === "sf2" || saved === "magenta") e = saved;
+  } catch (_) {}
+  if (engineSelect) engineSelect.value = e;
+  applyEngineUI();
+  return e;
+}
+
+if (engineSelect) engineSelect.addEventListener("change", () => {
+  const e = getEngine();
+  try { localStorage.setItem(ENGINE_KEY, e); } catch (_) {}
+  applyEngineUI();
+  // Stop the engine we're leaving so they never overlap.
+  if (e === "sf2") {
+    try { midiPlayer.stop(); } catch (_) {}
+    pendingMidi = null;
+    // Hand the current MIDI to the SF2 engine (it lazy-inits on first use).
+    const cur = midiPlayer.src || dlMidi.href;
+    if (cur && cur !== "#") window.dispatchEvent(new CustomEvent("lily:midi", { detail: { url: cur } }));
+  } else {
+    try { window.SF2?.stop(); } catch (_) {}
+  }
+});
 
 // Result pushed by the server after it auto-compiled a saved workspace file.
 async function showAutoCompiled(msg) {
@@ -523,6 +576,7 @@ try {
   loadOpacities();
   applyUiState();
   loadSoundFont();
+  loadEngine();
   try {
     const v = await api("/api/version");
     $("version").textContent = v.version;
