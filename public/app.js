@@ -150,10 +150,11 @@ function scheduleCompile(immediate = false) {
   debounce = setTimeout(() => compile(immediate), immediate ? 50 : 800);
 }
 
-// UI state in the URL hash: #<tab>[&png=<0-1>][&pdf=<0-1>], e.g. #pdf&pdf=0.55
-// Plain #png / #pdf / #midi links keep working, as do legacy percent links (#pdf&pdf=55).
+// UI state: tab lives in the URL hash (#png / #pdf / #midi);
+// opacities live in localStorage.
 const TABS = ["png", "pdf", "midi"];
 const uiState = { tab: "png", png: 1, pdf: 1 };
+const OP_KEY = "lily-opacities";
 
 function clampOp(v) {
   let n = parseFloat(v);
@@ -162,38 +163,25 @@ function clampOp(v) {
   return Math.round(Math.min(1, Math.max(0, n)) * 100) / 100;
 }
 
-function readUiState() {
-  const raw = location.hash.replace(/^#/, "");
-  const next = { tab: "png", png: 1, pdf: 1 };
-  for (const seg of raw.split("&")) {
-    if (!seg) continue;
-    if (!seg.includes("=")) {
-      if (TABS.includes(seg)) next.tab = seg;
-    } else {
-      const [k, v] = seg.split("=");
-      if (k === "png" || k === "pdf") {
-        const n = clampOp(v);
-        if (n !== null) next[k] = n;
-      }
+function loadOpacities() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(OP_KEY) || "{}");
+    for (const k of ["png", "pdf"]) {
+      const n = clampOp(saved[k]);
+      if (n !== null) uiState[k] = n;
     }
-  }
-  Object.assign(uiState, next);
+  } catch (_) {}
 }
 
-function fmtOp(n) {
-  return String(Math.round(n * 100) / 100);
+function saveOpacities() {
+  try {
+    localStorage.setItem(OP_KEY, JSON.stringify({ png: uiState.png, pdf: uiState.pdf }));
+  } catch (_) {}
 }
 
-function uiHash() {
-  let h = "#" + uiState.tab;
-  if (uiState.png !== 1) h += `&png=${fmtOp(uiState.png)}`;
-  if (uiState.pdf !== 1) h += `&pdf=${fmtOp(uiState.pdf)}`;
-  return h;
-}
-
-function writeUiState() {
-  // replaceState: no history spam while dragging sliders
-  try { history.replaceState(null, "", uiHash()); } catch (_) {}
+function readUiState() {
+  const seg = location.hash.replace(/^#/, "").split("&")[0];
+  uiState.tab = TABS.includes(seg) ? seg : "png";
 }
 
 function applyUiState() {
@@ -216,9 +204,9 @@ function activateTab(name) {
 document.querySelectorAll(".tabs button").forEach((b) => {
   b.onclick = () => {
     activateTab(b.dataset.tab);
-    // location.assign-changes create a history entry (back button works);
+    // Plain tab hash keeps a history entry (back button works);
     // the hashchange handler below applies it. Same-hash clicks apply directly.
-    const h = uiHash();
+    const h = "#" + uiState.tab;
     if (location.hash !== h) location.hash = h;
     else { readUiState(); applyUiState(); }
   };
@@ -231,7 +219,7 @@ for (const k of ["png", "pdf"]) {
     const n = clampOp(slider.value);
     uiState[k] = n === null ? 1 : n;
     applyUiState();
-    writeUiState();
+    saveOpacities();
   });
 }
 
@@ -387,6 +375,59 @@ function clearMidi() {
   try { midiViz.removeAttribute("src"); } catch (_) {}
 }
 
+// ---- SoundFont picker (browser-side Magenta sets, one at a time) ----
+const SF_SETS = {
+  sgm: { label: "General MIDI", url: "" },
+  salamander: { label: "Salamander grand piano", url: "https://storage.googleapis.com/magentadata/js/soundfonts/salamander" },
+  synth: { label: "Simple synth", url: null },
+};
+const SF_KEY = "lily-soundfont";
+const sfSelect = $("sfSelect");
+
+function loadSoundFont() {
+  let key = "sgm";
+  try {
+    const saved = localStorage.getItem(SF_KEY);
+    if (saved && saved in SF_SETS) key = saved;
+  } catch (_) {}
+  if (sfSelect) sfSelect.value = key;
+  try { midiPlayer.soundFont = SF_SETS[key].url; } catch (_) {}
+  return key;
+}
+
+function applySoundFont(key) {
+  const set = SF_SETS[key] || SF_SETS.sgm;
+  let wasPlaying = false;
+  try { wasPlaying = !!midiPlayer.playing; } catch (_) {}
+  try { midiPlayer.stop(); } catch (_) {}
+  try {
+    midiPlayer.soundFont = set.url;
+  } catch (_) {
+    setStatus("err", "soundfont switch failed");
+    return;
+  }
+  try { localStorage.setItem(SF_KEY, key in SF_SETS ? key : "sgm"); } catch (_) {}
+  const cur = (pendingMidi && pendingMidi.blobUrl) || midiPlayer.src;
+  if (!cur) return; // nothing loaded yet; choice applies to the next compile
+  setStatus("busy", `loading ${set.label.toLowerCase()}…`);
+  // Re-assign src so the player refetches current MIDI with the new samples.
+  try { midiPlayer.removeAttribute("src"); } catch (_) {}
+  midiGen++;
+  const gen = midiGen;
+  let loaded = false;
+  midiPlayer.addEventListener("load", () => {
+    if (gen !== midiGen) return;
+    loaded = true;
+    setStatus("ok", `${set.label} ready`);
+    if (wasPlaying && autoplayBox.checked) safeStart();
+  }, { once: true });
+  setTimeout(() => {
+    if (gen === midiGen && !loaded) setStatus("err", "soundfont load timed out — check connection");
+  }, 30000);
+  midiPlayer.src = cur;
+}
+if (sfSelect) sfSelect.addEventListener("change", () => applySoundFont(sfSelect.value));
+
 // Result pushed by the server after it auto-compiled a saved workspace file.
 async function showAutoCompiled(msg) {
   if (!msg.success) { showFailure(`error in ${msg.file}`, msg.log); return; }
@@ -479,7 +520,9 @@ try {
 // init
 (async () => {
   readUiState();
+  loadOpacities();
   applyUiState();
+  loadSoundFont();
   try {
     const v = await api("/api/version");
     $("version").textContent = v.version;

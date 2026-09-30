@@ -66,7 +66,15 @@
     </div>
 
     <div id="tab-midi" class="tab">
-      <div class="dl"><a id="dlMidi" href="#" download="preview.midi">Download MIDI</a></div>
+      <div class="dl"><a id="dlMidi" href="#" download="preview.midi">Download MIDI</a>
+        <label class="op">Sound
+          <select id="sfSelect" title="SoundFont: Salamander is piano-only; General MIDI covers all instruments">
+            <option value="sgm">General MIDI (default)</option>
+            <option value="salamander">Salamander grand piano</option>
+            <option value="synth">Simple synth (offline)</option>
+          </select>
+        </label>
+      </div>
       <div id="midiBox">
         <midi-player id="midiPlayer" sound-font></midi-player>
         <midi-visualizer id="midiViz" type="piano-roll"></midi-visualizer>

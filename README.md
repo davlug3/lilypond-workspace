@@ -37,16 +37,19 @@ Requires `lilypond` on PATH (you have 2.22.2). Check: `lilypond --version`.
     range, double-click to reset 50/50, arrow keys when focused). Position
     persists in `localStorage`. On narrow screens the panes stack and the
     divider hides.
+  - **SoundFont picker**: the MIDI tab offers General MIDI (default, all
+    instruments), Salamander grand piano (piano-only — other staves go
+    silent), and a simple offline synth. Choice persists in `localStorage`;
+    switching stops playback, reloads current MIDI with the new samples, and
+    resumes if it was playing.
   - **Theme**: clean light studio (neutral grays, single blue accent, system
     type), dark mode follows the OS. All text pairs contrast-checked ≥4.5:1
     in both themes (computed), score/PDF stay on paper white, error banner
     uses `role="alert"`, focus rings are visible, and `prefers-reduced-motion`
     disables transitions.
   - **Opacity controls**: each of the PNG and PDF tabs has an opacity slider
-    (0–1, 0.01 steps). Values live in the URL hash next to the tab
-    (e.g. `#pdf&pdf=0.55`, `#png&png=0.7&pdf=0.6`), so they survive reloads and
-    can be shared. Plain `#png` / `#pdf` / `#midi` links mean fully opaque
-    (legacy percent links like `#pdf&pdf=55` still work).
+    (0–1, 0.01 steps), persisted in `localStorage` so it survives reloads.
+    The URL hash carries only the tab (`#png` / `#pdf` / `#midi`).
   - **Follow file** (on by default): pins the selected file as the watched file.
     When it is saved — from your own editor, or the browser Save button — the
     server recompiles and the page auto-reloads score + log. In follow mode the
