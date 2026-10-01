@@ -1,0 +1,19 @@
+NOTICE — documentation sources and license
+
+This skill teaches LilyPond 2.26.0 usage. Its prose, structure, and
+task organization are original. Short code idioms and command names
+(e.g. \relative, \transpose, \lyricsto, \tweak) necessarily match the
+official documentation because they are the language itself.
+
+Factual grounding came from the official LilyPond manuals for version
+2.26.0 (Learning, Notation Reference, Usage, Extending, Changes,
+Internals, Snippets, Glossary, Essay) at https://lilypond.org,
+which are published under the GNU Free Documentation License
+(version 1.3 or later, no Invariant Sections, no Cover Texts).
+A full copy of the GFDL is in the Notation Reference appendix D
+("GNU Free Documentation License") and at
+https://www.gnu.org/licenses/fdl.html.
+
+No manual text is reproduced beyond short command-level examples
+required for accuracy. For the complete manuals, see
+https://lilypond.org/manuals.html.

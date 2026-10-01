@@ -1,4 +1,5 @@
 node_modules/
+.cache/
 public/preview.*
 public/preview-*.png
 public/auto.*
