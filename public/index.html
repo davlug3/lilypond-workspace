@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LilyPond Workspace — auto preview PNG / PDF / MIDI</title>
+<title>My Workspace — auto preview PNG / PDF / MIDI</title>
 <link rel="stylesheet" href="/style.css" />
 <script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/focus-visible@5,npm/html-midi-player@1.4.0"></script>
 <script type="importmap">
@@ -16,7 +16,7 @@
 <body>
 <header>
   <div>
-    <h1>LilyPond Workspace<span class="brand-dot">.</span></h1>
+    <h1>My Workspace<span class="brand-dot">.</span></h1>
     <p id="version">checking lilypond…</p>
   </div>
   <div class="header-actions">
@@ -73,6 +73,8 @@
 
     <div id="tab-midi" class="tab">
       <div class="dl"><a id="dlMidi" href="#" download="preview.midi">Download MIDI</a>
+        <button id="sf2UploadBtn" type="button" title="Upload a .sf2/.sf3/.dls bank (saved in browser + on server, then used for playback)">Upload soundfont</button>
+        <input type="file" id="sf2UploadFile" accept=".sf2,.sf3,.dls,.sfogg" hidden />
         <label class="op">Engine
           <select id="engineSelect" title="Magenta plays small streamed samples; SF2 loads full sound banks">
             <option value="magenta">Magenta</option>
@@ -95,6 +97,18 @@
           </select>
         </label>
       </div>
+      <div id="mixerBox" hidden>
+        <div class="dl" id="sectionRow">
+          <span class="op">Section</span>
+          <button type="button" data-section="full" class="seg active" title="Whole file">Full</button>
+          <button type="button" data-section="verse" class="seg" title="First half (bars 1-8 of the 16-bar form)">Verse</button>
+          <button type="button" data-section="chorus" class="seg" title="Second half (bars 9-16)">Chorus</button>
+          <label class="op"><input type="checkbox" id="loopBox" /> loop</label>
+          <span class="op mono" id="sectionTimes"></span>
+        </div>
+        <div id="mixerRows" aria-label="Instrument mixer: mute and solo per instrument"></div>
+        <p class="hint" id="mixerHint">Mute/Solo reshape the MIDI in your browser (both engines). Section buttons play half the file; exact verse/chorus scores live in <code>09-verse-band.ly</code> / <code>10-chorus-band.ly</code>.</p>
+      </div>
       <div id="midiBox">
         <midi-player id="midiPlayer" sound-font></midi-player>
         <midi-visualizer id="midiViz" type="piano-roll"></midi-visualizer>
@@ -112,6 +126,7 @@
           <input type="file" id="sf2File" accept=".sf2,.sf3,.dls,.sfogg" hidden />
           <input type="url" id="sf2Url" placeholder="https://…/bank.sf2 or .sf3" hidden />
           <button id="sf2LoadBtn" type="button" hidden>Load bank</button>
+          <button id="sf2DeleteBtn" type="button" hidden title="Delete this saved bank">Delete saved bank</button>
         </div>
         <p id="sf2Status" class="empty" aria-live="polite">SF2 engine idle — pick Play after a compile, or load a bank.</p>
       </div>
@@ -119,6 +134,7 @@
   </section>
 </main>
 
+<script src="/midi-tools.js"></script>
 <script src="/app.js"></script>
 <script type="module" src="/sf2-player.js"></script>
 </body>

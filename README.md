@@ -84,12 +84,22 @@ pinned in the `importmap` in `public/index.html`) for the SF2 engine.
 For MIDI output you need a `\midi { }` block in your `\score`,
 e.g. `workspace/scale-midi.ly`. Without it, the MIDI tab shows "No MIDI yet" — expected.
 
+The MIDI tab also has a **mixer** (mute/solo per instrument) and **section**
+buttons (Full/Verse/Chorus + loop). Both reshape MIDI bytes in the browser
+(`public/midi-tools.js`, tested with node), so they work on either engine.
+Sections assume the 16-bar form (verse = first half); the exact
+verse/chorus scores are `workspace/rock-band/09-verse-band.ly` and
+`workspace/rock-band/10-chorus-band.ly`.
+
 ## Project layout
 
 ```
 server.js            Express + lilypond compile + watcher
-public/              index.html, app.js, style.css, preview.* (generated)
+public/              index.html, app.js, midi-tools.js, style.css, preview.* (generated)
 workspace/           hello.ly, scale-midi.ly — edit/add your .ly files here
                    (subfolders ok: listed + watched recursively)
+workspace/rock-band/ "Midnight Wire" rock-band examples:
+                   parts/*.ily (single source of truth — edit notes here),
+                   01-08 thin score wrappers + 09-verse / 10-chorus sections
 package.json
 ```

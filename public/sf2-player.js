@@ -6,8 +6,10 @@
 //   "lily:midi" { url } — a new MIDI is ready (autoplay if engine + checkbox say so)
 //   "lily:midi-clear"   — no MIDI (score has no \midi block)
 // This module is intentionally decoupled: it works even if it loads after app.js.
-import { WorkletSynthesizer, Sequencer } from "spessasynth_lib";
-
+// NOTE: no static imports here on purpose — if the SpessaSynth CDN is
+// unreachable, a static import would kill this whole module (upload, bank
+// list, selection included). The synth library loads lazily in
+// ensureEngine(); everything else works without it.
 const SPESSA_VERSION = "4.3.14";
 const WORKLET_URL = `https://cdn.jsdelivr.net/npm/spessasynth_lib@${SPESSA_VERSION}/dist/spessasynth_processor.min.js`;
 
@@ -20,6 +22,133 @@ const SF2_BANKS = {
 };
 const SF2_KEY = "lily-sf2-bank";
 const SF2_URL_KEY = "lily-sf2-url";
+const OPFS_DIR = "lily-soundfonts";
+
+// ---- Persistent storage: OPFS (browser, origin-private files) + server ----
+// Same shapes as before ({name, size} lists; {name, buffer} records) so all
+// callers work unchanged. Throws with a clear message when OPFS is missing.
+async function opfsDir() {
+  const storage = navigator.storage;
+  if (!storage?.getDirectory) throw new Error("OPFS not available in this browser");
+  const root = await storage.getDirectory();
+  return root.getDirectoryHandle(OPFS_DIR, { create: true });
+}
+
+async function opfsList() {
+  try {
+    const dir = await opfsDir();
+    const out = [];
+    for await (const [name, handle] of dir.entries()) {
+      if (handle.kind !== "file") continue;
+      let size = 0;
+      try { size = (await handle.getFile()).size; } catch (_) {}
+      out.push({ name, size });
+    }
+    out.sort((a, b) => a.name.localeCompare(b.name));
+    return out;
+  } catch (_) { return []; }
+}
+
+async function opfsGet(name) {
+  if (name.includes("/")) throw new Error("bad bank name");
+  const dir = await opfsDir();
+  const handle = await dir.getFileHandle(name);
+  const file = await handle.getFile();
+  return { name, buffer: await file.arrayBuffer(), size: file.size };
+}
+
+async function opfsPut(name, buffer) {
+  if (name.includes("/")) throw new Error("bad bank name");
+  const dir = await opfsDir();
+  const handle = await dir.getFileHandle(name, { create: true });
+  const w = await handle.createWritable();
+  try {
+    await w.write(buffer);
+  } finally {
+    await w.close();
+  }
+  return true;
+}
+
+async function opfsDelete(name) {
+  const dir = await opfsDir();
+  await dir.removeEntry(name);
+  return true;
+}
+
+
+async function fetchServerBanks() {
+  try {
+    const r = await fetch("/api/soundfonts", { cache: "no-store" });
+    if (!r.ok) return [];
+    const { files } = await r.json();
+    return Array.isArray(files) ? files : [];
+  } catch (_) { return []; }
+}
+
+async function uploadToServer(name, buffer) {
+  const r = await fetch(`/api/soundfonts?name=${encodeURIComponent(name)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream", "X-Filename": name },
+    body: buffer,
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function sanitizeBankName(name) {
+  const base = String(name || "bank").split(/[\\/]/).pop().replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
+  return /\.(sf2|sf3|dls|sfogg)$/i.test(base) ? base : `${base || "bank"}.sf2`;
+}
+
+// (Re)build the Bank <select> from built-ins + OPFS + server entries.
+// Preserves the current/saved selection; returns { opfs, server } lists.
+async function refreshPersistentBanks() {
+  const sel = $("sf2Select");
+  if (!sel) return { opfs: [], server: [] };
+  const [opfs, server] = await Promise.all([opfsList(), fetchServerBanks()]);
+  const keep = sel.value || savedBankKey();
+  // Drop previously injected dynamic options, keep built-ins + custom/url.
+  for (const opt of [...sel.querySelectorAll("option[data-dyn]")]) opt.remove();
+  for (const { name, size } of opfs) {
+    const o = document.createElement("option");
+    o.value = `opfs:${name}`;
+    o.dataset.dyn = "opfs";
+    o.textContent = `${name} (browser${size ? `, ${Math.round(size / 1048576)} MB` : ""})`;
+    sel.insertBefore(o, [...sel.options].find((x) => x.value === "custom") || null);
+  }
+  for (const { name, size } of server) {
+    const o = document.createElement("option");
+    o.value = `server:${name}`;
+    o.dataset.dyn = "server";
+    o.textContent = `${name} (server${size ? `, ${Math.round(size / 1048576)} MB` : ""})`;
+    sel.insertBefore(o, [...sel.options].find((x) => x.value === "custom") || null);
+  }
+  const valid = new Set([...sel.options].map((o) => o.value));
+  sel.value = valid.has(keep) ? keep : savedBankKeyFallback(valid);
+  updateDeleteBtn();
+  return { opfs, server };
+}
+
+function savedBankKeyFallback(valid) {
+  const saved = savedBankKey();
+  if (valid.has(saved)) return saved;
+  if (valid.has("generaluser")) return "generaluser";
+  return sel_first(valid);
+}
+
+function sel_first(valid) {
+  for (const v of valid) return v;
+  return "generaluser";
+}
+
+function updateDeleteBtn() {
+  const sel = $("sf2Select");
+  const del = $("sf2DeleteBtn");
+  if (!del) return;
+  const v = sel?.value || "";
+  del.hidden = !(v.startsWith("opfs:") || v.startsWith("server:"));
+}
 
 const $ = (id) => document.getElementById(id);
 const statusEl = () => $("sf2Status");
@@ -47,11 +176,19 @@ let currentBank = null; // label of loaded bank
 let midiSeq = 0; // guards rapid saves: stale MIDI fetches are dropped
 let stagedMidi = null; // ArrayBuffer waiting for a bank
 let lastMidiUrl = null;
+let sf2Loop = false; // loop the current MIDI (set from app.js loop checkbox)
+let sf2WasPlaying = false; // latch: only loop after natural ends, never after stop
 
 async function ensureEngine() {
   if (engineReady) return engineReady;
   engineReady = (async () => {
     setSf2Status("SF2: starting audio engine…");
+    let WorkletSynthesizer, Sequencer;
+    try {
+      ({ WorkletSynthesizer, Sequencer } = await import("spessasynth_lib"));
+    } catch (e) {
+      throw new Error(`SpessaSynth library failed to load (check connection): ${e?.message || e}`);
+    }
     ctx = new AudioContext();
     await ctx.audioWorklet.addModule(WORKLET_URL);
     synth = new WorkletSynthesizer(ctx);
@@ -63,7 +200,7 @@ async function ensureEngine() {
     try {
       await synth.isReady;
     } catch (_) {}
-    // Keep the seek UI moving while playing.
+    // Keep the seek UI moving while playing; loop the track on natural end.
     setInterval(() => {
       try {
         const seek = $("sf2Seek");
@@ -75,6 +212,10 @@ async function ensureEngine() {
           seek.value = String(Math.round((cur / dur) * 1000));
         }
         time.textContent = `${fmtTime(cur)} / ${fmtTime(dur)}`;
+        if (sf2Loop && sf2WasPlaying && seq.isFinished) {
+          seq.currentTime = 0;
+          seq.play();
+        }
       } catch (_) {}
     }, 250);
     setSf2Status(currentBank ? `SF2 ready — ${currentBank}` : "SF2 ready — pick a bank, then Play.");
@@ -115,6 +256,15 @@ async function loadBank(buffer, label, cacheKey) {
 }
 
 async function loadBankByKey(key, opts = {}) {
+  const hideLoadRow = () => {
+    const f = $("sf2File");
+    if (f) f.hidden = true;
+    const u = $("sf2Url");
+    if (u) u.hidden = true;
+    const b = $("sf2LoadBtn");
+    if (b) b.hidden = true;
+    updateDeleteBtn();
+  };
   if (key === "custom") {
     const f = $("sf2File");
     if (f) {
@@ -125,7 +275,8 @@ async function loadBankByKey(key, opts = {}) {
     if (u) u.hidden = true;
     const b = $("sf2LoadBtn");
     if (b) b.hidden = true;
-    setSf2Status("SF2: choose an .sf2 / .sf3 / .dls file.");
+    updateDeleteBtn();
+    setSf2Status("SF2: choose an .sf2 / .sf3 / .dls file — it will be saved in this browser + on the server.");
     return;
   }
   if (key === "url") {
@@ -135,17 +286,42 @@ async function loadBankByKey(key, opts = {}) {
     if (b) b.hidden = false;
     const f = $("sf2File");
     if (f) f.hidden = true;
+    updateDeleteBtn();
     setSf2Status("SF2: paste a bank URL, then Load bank.");
     if (opts.url) return loadBankFromUrl(opts.url);
     return;
   }
+  if (key?.startsWith("opfs:")) {
+    hideLoadRow();
+    const name = key.slice(5);
+    try { localStorage.setItem(SF2_KEY, key); } catch (_) {}
+    try {
+      if (bankCache.has(key)) return loadBank(bankCache.get(key), `${name} (browser)`, key);
+      setSf2Status(`SF2: loading ${name} from browser storage…`);
+      const rec = await opfsGet(name);
+      if (!rec?.buffer) throw new Error("not found in browser storage");
+      return loadBank(rec.buffer, `${name} (browser)`, key);
+    } catch (e) {
+      setSf2Status(`SF2: browser bank missing (${e?.message || e}) — re-upload the file.`);
+      return;
+    }
+  }
+  if (key?.startsWith("server:")) {
+    hideLoadRow();
+    const name = key.slice(7);
+    try { localStorage.setItem(SF2_KEY, key); } catch (_) {}
+    try {
+      if (bankCache.has(key)) return loadBank(bankCache.get(key), `${name} (server)`, key);
+      setSf2Status(`SF2: downloading ${name} from server…`);
+      const buf = await fetchBuffer(`/soundfonts/${encodeURIComponent(name)}`);
+      return loadBank(buf, `${name} (server)`, key);
+    } catch (e) {
+      setSf2Status(`SF2 server bank failed: ${e?.message || e}`);
+      return;
+    }
+  }
   const bank = SF2_BANKS[key] || SF2_BANKS.generaluser;
-  const f = $("sf2File");
-  if (f) f.hidden = true;
-  const u = $("sf2Url");
-  if (u) u.hidden = true;
-  const b = $("sf2LoadBtn");
-  if (b) b.hidden = true;
+  hideLoadRow();
   try {
     localStorage.setItem(SF2_KEY, key in SF2_BANKS ? key : "generaluser");
   } catch (_) {}
@@ -188,11 +364,13 @@ async function playBuffer(buffer, autoplay) {
   if (autoplay) {
     try {
       seq.play();
+      sf2WasPlaying = true;
       setSf2Status(currentBank ? `SF2 playing — ${currentBank}` : "SF2 playing.");
     } catch (e) {
       setSf2Status(`SF2 play blocked: ${e?.message || e} — press Play.`);
     }
   } else {
+    sf2WasPlaying = false;
     setSf2Status(`SF2 loaded (${fmtTime(seq.duration || 0)}) — press Play.`);
   }
 }
@@ -200,6 +378,7 @@ async function playBuffer(buffer, autoplay) {
 // Public entry: app.js calls this via the "lily:midi" event (and window.SF2).
 async function loadMidi(url) {
   lastMidiUrl = url;
+  sf2WasPlaying = false; // new file: loop restarts only after it plays again
   const gen = ++midiSeq;
   const shouldPlay = autoplayOn() && engineIsSf2();
   try {
@@ -230,8 +409,59 @@ function savedBankKey() {
   try {
     const k = localStorage.getItem(SF2_KEY);
     if (k && (k in SF2_BANKS || k === "custom" || k === "url")) return k;
+    // Pre-OPFS selections used the idb: prefix for the same filenames.
+    if (k && k.startsWith("idb:")) return "opfs:" + k.slice(4);
+    if (k && k.startsWith("opfs:") || k?.startsWith("server:")) return k;
   } catch (_) {}
   return "generaluser";
+}
+
+// Full upload pipeline at module scope (so window.SF2.upload can reach
+// it): read -> play now if the engine starts -> persist (browser +
+// server) -> select the stored copy.
+async function uploadBankFile(file) {
+  if (!file) return { ok: false, error: "no file" };
+  const safe = sanitizeBankName(file.name);
+  let buf;
+  try {
+    buf = await file.arrayBuffer();
+  } catch (e) {
+    setSf2Status(`SF2: could not read file: ${e?.message || e}`);
+    return { ok: false, error: e?.message || String(e) };
+  }
+  let played = false;
+  try {
+    await loadBank(buf, file.name, `opfs:${safe}`);
+    played = true;
+  } catch (e) {
+    console.warn("instant play failed (file will still be saved):", e?.message || e);
+  }
+  let opfsOk = false;
+  try { await opfsPut(safe, buf.slice(0)); opfsOk = true; } catch (e) {
+    console.warn("opfs save failed:", e.message);
+  }
+  let serverOk = false;
+  try { await uploadToServer(safe, buf); serverOk = true; } catch (e) {
+    console.warn("server upload failed:", e.message);
+  }
+  await refreshPersistentBanks();
+  const next = serverOk ? `server:${safe}` : (opfsOk ? `opfs:${safe}` : "custom");
+  if ([...$("sf2Select").options].some((o) => o.value === next)) {
+    $("sf2Select").value = next;
+    try { localStorage.setItem(SF2_KEY, next); } catch (_) {}
+  }
+  updateDeleteBtn();
+  const where = [opfsOk ? "browser" : null, serverOk ? "server" : null].filter(Boolean).join(" + ");
+  if (!played && !opfsOk && !serverOk) {
+    setSf2Status(`SF2: ${file.name} could not be played or saved — check connection and storage.`);
+    return { ok: false, error: "play and persist both failed" };
+  }
+  setSf2Status(
+    `SF2: ${file.name} ready` +
+    (where ? ` — saved to ${where}` : "") +
+    (played ? "." : " (saved; playback starts when the engine loads).")
+  );
+  return { ok: true, key: next, where };
 }
 
 // ---- Controls ----
@@ -271,21 +501,46 @@ function bindControls() {
       try {
         localStorage.setItem(SF2_KEY, sel.value);
       } catch (_) {}
+      updateDeleteBtn();
       loadBankByKey(sel.value).catch(() => {});
     });
+    // Populate browser + server banks, then restore the saved selection.
+    refreshPersistentBanks().then(({ opfs, server }) => {
+      const want = savedBankKey();
+      if ([...sel.options].some((o) => o.value === want)) sel.value = want;
+      updateDeleteBtn();
+      if (want.startsWith("opfs:") || want.startsWith("server:")) {
+        const hasAny = opfs.length + server.length > 0;
+        setSf2Status(hasAny ? "SF2: restored saved bank — press Play." : "SF2 ready — pick a bank, then Play.");
+      }
+    }).catch(() => {});
   }
   const f = $("sf2File");
   if (f) f.addEventListener("change", async () => {
     const file = f.files?.[0];
     if (!file) return;
+    await uploadBankFile(file);
+    f.value = "";
+  });
+  const del = $("sf2DeleteBtn");
+  if (del) del.addEventListener("click", async () => {
+    const v = $("sf2Select")?.value || "";
     try {
-      const buf = await file.arrayBuffer();
-      await loadBank(buf, file.name, null);
-      try {
-        localStorage.setItem(SF2_KEY, "custom");
-      } catch (_) {}
+      if (v.startsWith("opfs:")) {
+        await opfsDelete(v.slice(5));
+        bankCache.delete(v);
+      } else if (v.startsWith("server:")) {
+        const r = await fetch(`/api/soundfonts/${encodeURIComponent(v.slice(7))}`, { method: "DELETE" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        bankCache.delete(v);
+      } else return;
+      try { localStorage.setItem(SF2_KEY, "generaluser"); } catch (_) {}
+      await refreshPersistentBanks();
+      $("sf2Select").value = "generaluser";
+      updateDeleteBtn();
+      setSf2Status("SF2: saved bank deleted.");
     } catch (e) {
-      setSf2Status(`SF2: could not read file: ${e?.message || e}`);
+      setSf2Status(`SF2 delete failed: ${e?.message || e}`);
     }
   });
   const lb = $("sf2LoadBtn");
@@ -302,6 +557,7 @@ function bindControls() {
       }
       await ctx.resume().catch(() => {});
       seq.play();
+      sf2WasPlaying = true;
       setSf2Status(currentBank ? `SF2 playing — ${currentBank}` : "SF2 playing.");
     } catch (e) {
       setSf2Status(`SF2 play failed: ${e?.message || e}`);
@@ -311,6 +567,7 @@ function bindControls() {
   if (pause) pause.addEventListener("click", () => {
     try {
       seq?.pause();
+      sf2WasPlaying = false;
       setSf2Status("SF2 paused.");
     } catch (_) {}
   });
@@ -320,6 +577,7 @@ function bindControls() {
       if (seq?.stop) seq.stop();
       else seq?.pause();
       if (seq) seq.currentTime = 0;
+      sf2WasPlaying = false;
       setSf2Status("SF2 stopped.");
     } catch (_) {}
   });
@@ -340,6 +598,7 @@ window.addEventListener("lily:midi-clear", () => {
   midiSeq++;
   stagedMidi = null;
   lastMidiUrl = null;
+  sf2WasPlaying = false;
   try {
     if (seq?.stop) seq.stop();
     else seq?.pause();
@@ -353,13 +612,17 @@ window.SF2 = {
     try {
       if (seq?.stop) seq.stop();
       else seq?.pause();
+      sf2WasPlaying = false;
     } catch (_) {}
   },
   play: () => {
     try {
       seq?.play();
+      sf2WasPlaying = true;
     } catch (_) {}
   },
+  setLoop: (v) => { sf2Loop = !!v; },
+  upload: (file) => uploadBankFile(file),
   banks: SF2_BANKS,
 };
 

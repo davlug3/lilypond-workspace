@@ -10,11 +10,21 @@ const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const WORKSPACE_DIR = path.join(ROOT, "workspace");
 const PUBLIC_DIR = path.join(ROOT, "public");
+const SOUNDFONTS_DIR = path.join(PUBLIC_DIR, "soundfonts");
+const SF_EXTS = new Set([".sf2", ".sf3", ".dls", ".sfogg"]);
 
 fssync.mkdirSync(WORKSPACE_DIR, { recursive: true });
+fssync.mkdirSync(SOUNDFONTS_DIR, { recursive: true });
 
 app.use(express.json({ limit: "2mb" }));
 app.use(express.static(PUBLIC_DIR));
+
+function safeSoundfontName(name) {
+  const base = path.basename(String(name || "")).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
+  const ext = path.extname(base).toLowerCase();
+  if (!base || !SF_EXTS.has(ext)) return null;
+  return base;
+}
 
 function safeName(name) {
   return (name || "score").replace(/[^a-zA-Z0-9-_]/g, "_").slice(0, 60) || "score";
@@ -57,7 +67,20 @@ function runLilypond(inputFile, outPrefix) {
   return new Promise((resolve) => {
     execFile(
       "lilypond",
-      ["--png", "--pdf", "-o", outPrefix, inputFile],
+      [
+        "--png",
+        "--pdf",
+        "-o",
+        outPrefix,
+        // Resolve file-relative \include paths (e.g. "parts/shared.ily"):
+        // tmp-dir compiles lose the score's directory, so offer the
+        // workspace tree as fallback search roots (browser editor too).
+        "-I",
+        WORKSPACE_DIR,
+        "-I",
+        path.join(WORKSPACE_DIR, "rock-band"),
+        inputFile,
+      ],
       { timeout: 30000, maxBuffer: 10 * 1024 * 1024 },
       (error, stdout, stderr) => {
         resolve({ error, stdout: String(stdout || ""), stderr: String(stderr || "") });
@@ -174,6 +197,60 @@ app.put("/api/file", async (req, res) => {
     await fs.mkdir(path.dirname(target.full), { recursive: true });
     await fs.writeFile(target.full, String(req.body?.code ?? ""), "utf8");
     res.json({ ok: true, name: target.rel });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ---- Server-persisted SoundFonts (public/soundfonts/*) ----
+// List: GET /api/soundfonts -> { files: [{ name, url, size }] }
+// Upload: POST /api/soundfonts with Content-Type: application/octet-stream,
+//   filename via X-Filename header or ?name=, body is raw .sf2/.sf3/.dls bytes.
+// Delete: DELETE /api/soundfonts/:name
+app.get("/api/soundfonts", async (_req, res) => {
+  try {
+    const entries = await fs.readdir(SOUNDFONTS_DIR, { withFileTypes: true });
+    const files = [];
+    for (const e of entries) {
+      if (!e.isFile()) continue;
+      if (!SF_EXTS.has(path.extname(e.name).toLowerCase())) continue;
+      let size = 0;
+      try {
+        size = (await fs.stat(path.join(SOUNDFONTS_DIR, e.name))).size;
+      } catch (_) {}
+      files.push({ name: e.name, url: `/soundfonts/${encodeURIComponent(e.name)}`, size });
+    }
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    res.json({ files });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post(
+  "/api/soundfonts",
+  express.raw({ type: "application/octet-stream", limit: "300mb" }),
+  async (req, res) => {
+    const rawName = req.get("X-Filename") || req.query.name || "";
+    const name = safeSoundfontName(rawName);
+    if (!name) return res.status(400).json({ error: "filename must end in .sf2/.sf3/.dls/.sfogg (use X-Filename header or ?name=)" });
+    if (!req.body || !req.body.length) return res.status(400).json({ error: "empty upload body" });
+    try {
+      await fs.writeFile(path.join(SOUNDFONTS_DIR, name), req.body);
+      const size = req.body.length;
+      res.json({ ok: true, name, url: `/soundfonts/${encodeURIComponent(name)}`, size });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  }
+);
+
+app.delete("/api/soundfonts/:name", async (req, res) => {
+  const name = safeSoundfontName(req.params.name);
+  if (!name) return res.status(400).json({ error: "unknown soundfont" });
+  try {
+    await fs.rm(path.join(SOUNDFONTS_DIR, name), { force: true });
+    res.json({ ok: true, name });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -36,6 +36,7 @@ async function refreshFiles(selected) {
 
 async function loadFile(name) {
   if (!name) return;
+  resetMixForFile();
   try {
     const { code } = await api(`/api/file?name=${encodeURIComponent(name)}`);
     editor.value = code;
@@ -324,32 +325,176 @@ function safeStart() {
   }
 }
 
+// ---- Mixer (mute/solo per instrument) + section play/loop ----
+// Engine-agnostic: MidiTools reshapes MIDI *bytes* (filter channels,
+// slice time), so Magenta and SF2 both play the mix without special APIs.
+// Section halves assume the 16-bar form (verse 1-8, chorus 9-16, constant
+// tempo); 09-verse/10-chorus files hide the slice buttons (each IS a section).
+let midiParsed = null; // { parsed, bytes, url, file, gen }
+const mix = { muted: new Set(), solo: new Set(), section: "full", loop: false };
+
+function fmtClock(s) {
+  s = Math.max(0, s || 0);
+  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+}
+
+function isSectionFile(name) {
+  return /(^|\/)0[19]-(verse|chorus)[^/]*\.ly$/.test(name || "") || /(^|\/)10-chorus[^/]*\.ly$/.test(name || "");
+}
+
+function currentMixGroups() {
+  try {
+    return midiParsed ? MidiTools.mixGroups(midiParsed.parsed) : [];
+  } catch (_) { return []; }
+}
+
+function effectiveChannels() {
+  const groups = currentMixGroups();
+  const all = new Set(groups.flatMap((g) => g.channels));
+  if (mix.solo.size) {
+    const keep = new Set();
+    for (const g of groups) if (mix.solo.has(g.label)) for (const c of g.channels) keep.add(c);
+    return keep.size ? keep : all; // soloing unknown labels = no-op
+  }
+  const keep = new Set(all);
+  for (const g of groups) if (mix.muted.has(g.label)) for (const c of g.channels) keep.delete(c);
+  return keep.size ? keep : all; // never mute absolutely everything
+}
+
+function renderMixerPanel() {
+  const box = $("mixerBox"), rows = $("mixerRows"), times = $("sectionTimes");
+  if (!box || !rows) return;
+  if (!midiParsed) { box.hidden = true; return; }
+  box.hidden = false;
+  const secFile = isSectionFile(midiParsed.file);
+  document.querySelectorAll("#sectionRow button.seg").forEach((b) => {
+    const s = b.dataset.section;
+    b.classList.toggle("active", mix.section === s);
+    b.hidden = secFile && s !== "full";
+  });
+  try {
+    const d = MidiTools.durationSec(midiParsed.parsed);
+    if (times) times.textContent = secFile
+      ? `full ${fmtClock(d)} (this file is one section — loop it below)`
+      : `full ${fmtClock(d)} · verse 0:00–${fmtClock(d / 2)} · chorus ${fmtClock(d / 2)}–${fmtClock(d)}`;
+  } catch (_) {}
+  rows.innerHTML = "";
+  for (const g of currentMixGroups()) {
+    const row = document.createElement("div");
+    row.className = "mixrow" + (mix.muted.has(g.label) && !mix.solo.has(g.label) ? " muted" : "");
+    const nm = document.createElement("span");
+    nm.className = "nm";
+    nm.title = `channels ${g.channels.join(", ")} · ${g.tracks.length} track(s)`;
+    nm.textContent = g.label;
+    const m = document.createElement("button");
+    m.type = "button"; m.textContent = "M"; m.title = `Mute ${g.label}`;
+    m.classList.toggle("on-m", mix.muted.has(g.label));
+    m.onclick = () => {
+      mix.muted.has(g.label) ? mix.muted.delete(g.label) : mix.muted.add(g.label);
+      renderMixerPanel(); applyMixAndStage(true);
+    };
+    const s = document.createElement("button");
+    s.type = "button"; s.textContent = "S"; s.title = `Solo ${g.label}`;
+    s.classList.toggle("on-s", mix.solo.has(g.label));
+    s.onclick = () => {
+      mix.solo.has(g.label) ? mix.solo.delete(g.label) : mix.solo.add(g.label);
+      renderMixerPanel(); applyMixAndStage(true);
+    };
+    row.append(nm, m, s);
+    rows.appendChild(row);
+  }
+}
+
+// Build the mixed MIDI (mute/solo filter, then section slice) and stage it
+// through the existing gapless pipeline, so autoplay/follow behavior is unchanged.
+function applyMixAndStage(shouldStart) {
+  if (!midiParsed) return;
+  const gen = midiParsed.gen;
+  try {
+    const groups = currentMixGroups();
+    const all = new Set(groups.flatMap((g) => g.channels));
+    const keep = effectiveChannels();
+    const filtering = keep.size < all.size;
+    let parsed = midiParsed.parsed, out = null;
+    if (filtering) {
+      out = MidiTools.filterChannels(parsed, keep);
+      parsed = MidiTools.parseMidi(out);
+    }
+    if (mix.section !== "full") {
+      const [a, b] = MidiTools.sectionRange(parsed, mix.section);
+      out = MidiTools.sliceTime(parsed, a, b);
+    } else if (!filtering) {
+      stageMixedBytes(midiParsed.bytes, shouldStart, gen);
+      return;
+    }
+    stageMixedBytes(out, shouldStart, gen);
+  } catch (e) {
+    console.warn("mix failed, staging original:", e?.message || e);
+    stageMixedBytes(midiParsed.bytes, shouldStart, gen);
+  }
+}
+
+function stageMixedBytes(buf, shouldStart, gen) {
+  const blob = new Blob([buf], { type: "audio/midi" });
+  const blobUrl = URL.createObjectURL(blob);
+  if (pendingMidi?.blobUrl?.startsWith("blob:")) URL.revokeObjectURL(pendingMidi.blobUrl);
+  pendingMidi = { url: blobUrl, blobUrl, gen };
+  dlMidi.href = blobUrl;
+  midiViz.src = blobUrl; // visual matches the audio
+  window.dispatchEvent(new CustomEvent("lily:midi", { detail: { url: blobUrl } }));
+  swapStagedMidi(shouldStart);
+}
+
+function resetMixForFile() {
+  mix.muted.clear();
+  mix.solo.clear();
+  mix.section = "full";
+}
+
 // Fetch the new MIDI fully before touching the player, so the swap is instant;
 // the staged version then cuts in immediately (autoplay on) or on next Play.
 // In SF2 mode the MIDI is handed to the SpessaSynth engine instead (event-driven,
 // so it works even if the SF2 module is still loading).
 async function updateMidiNeatly(url) {
-  dlMidi.href = url;
-  window.dispatchEvent(new CustomEvent("lily:midi", { detail: { url } }));
-  if (getEngine() === "sf2") return;
   const gen = ++midiGen;
-  let blobUrl = url;
-  if (!url.startsWith("data:")) {
-    try {
+  let bytes = null;
+  try {
+    if (url.startsWith("data:")) {
+      const bin = atob(url.slice(url.indexOf(",") + 1));
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      bytes = arr.buffer;
+    } else {
       const r = await fetch(url, { cache: "no-store" });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const blob = await r.blob();
-      if (gen !== midiGen) return; // superseded by a newer save
-      blobUrl = URL.createObjectURL(blob);
-    } catch (e) {
-      console.warn("midi stage failed, falling back to direct URL:", e.message);
+      bytes = await r.arrayBuffer();
       if (gen !== midiGen) return;
     }
+  } catch (e) {
+    console.warn("midi fetch failed:", e.message);
+    if (gen !== midiGen) return;
   }
-  if (pendingMidi?.blobUrl.startsWith("blob:")) URL.revokeObjectURL(pendingMidi.blobUrl);
-  pendingMidi = { url, blobUrl, gen };
-  // Play as soon as the new version is ready, cutting any current audio.
-  swapStagedMidi(autoplayBox.checked);
+  if (gen !== midiGen) return;
+  if (bytes) {
+    try {
+      midiParsed = { parsed: MidiTools.parseMidi(bytes), bytes, url, file: fileSelect.value, gen };
+    } catch (e) {
+      console.warn("midi parse failed, staging raw:", e.message);
+      midiParsed = null;
+    }
+  }
+  if (!midiParsed) {
+    // Fallback: previous behavior (stage URL as-is, no mixer).
+    dlMidi.href = url;
+    window.dispatchEvent(new CustomEvent("lily:midi", { detail: { url } }));
+    if (getEngine() === "sf2") return;
+    if (pendingMidi?.blobUrl?.startsWith("blob:")) URL.revokeObjectURL(pendingMidi.blobUrl);
+    pendingMidi = { url, blobUrl: url, gen };
+    swapStagedMidi(autoplayBox.checked);
+    return;
+  }
+  renderMixerPanel();
+  applyMixAndStage(autoplayBox.checked);
 }
 
 // Swap the staged file into the player. Listener is attached BEFORE setting
@@ -374,10 +519,38 @@ function swapStagedMidi(shouldStart) {
 function clearMidi() {
   midiGen++;
   pendingMidi = null;
+  midiParsed = null;
+  const box = $("mixerBox");
+  if (box) box.hidden = true;
   window.dispatchEvent(new CustomEvent("lily:midi-clear"));
   noMidi.hidden = false;
   try { midiPlayer.removeAttribute("src"); } catch (_) {}
   try { midiViz.removeAttribute("src"); } catch (_) {}
+}
+
+// Section buttons + loop toggle (wired once at init).
+document.querySelectorAll("#sectionRow button.seg").forEach((b) => {
+  b.onclick = () => {
+    mix.section = b.dataset.section;
+    renderMixerPanel();
+    applyMixAndStage(true); // audition immediately
+  };
+});
+{
+  const loopBox = $("loopBox");
+  if (loopBox) loopBox.addEventListener("change", () => {
+    mix.loop = loopBox.checked;
+    try { window.SF2?.setLoop?.(loopBox.checked); } catch (_) {}
+  });
+  // Loop the current mix/section when a track ends naturally.
+  // Manual stops don't carry finished=true, so they never re-trigger.
+  try {
+    midiPlayer.addEventListener("stop", (e) => {
+      try {
+        if (mix.loop && autoplayBox.checked && e && e.detail && e.detail.finished) safeStart();
+      } catch (_) {}
+    });
+  } catch (_) {}
 }
 
 // ---- SoundFont picker (browser-side Magenta sets, one at a time) ----
@@ -480,6 +653,44 @@ if (engineSelect) engineSelect.addEventListener("change", () => {
     try { window.SF2?.stop(); } catch (_) {}
   }
 });
+
+// Visible soundfont upload (either engine): store in browser + on server,
+// then switch to SF2 so the new bank plays immediately.
+{
+  const upBtn = $("sf2UploadBtn"), upFile = $("sf2UploadFile");
+  if (upBtn && upFile) {
+    upBtn.onclick = () => upFile.click();
+    upFile.addEventListener("change", async () => {
+      const file = upFile.files?.[0];
+      upFile.value = "";
+      if (!file) return;
+      if (!window.SF2?.upload) {
+        setStatus("err", "uploader not ready — reload the page and retry");
+        return;
+      }
+      setStatus("busy", `uploading ${file.name}…`);
+      let res;
+      try {
+        res = await window.SF2.upload(file);
+      } catch (e) {
+        setStatus("err", `upload failed: ${e?.message || e}`);
+        return;
+      }
+      if (!res?.ok) {
+        setStatus("err", `upload failed: ${res?.error || "unknown error"}`);
+        return;
+      }
+      try { localStorage.setItem(ENGINE_KEY, "sf2"); } catch (_) {}
+      if (engineSelect) engineSelect.value = "sf2";
+      applyEngineUI();
+      try { midiPlayer.stop(); } catch (_) {}
+      pendingMidi = null;
+      const cur = midiPlayer.src || dlMidi.href;
+      if (cur && cur !== "#") window.dispatchEvent(new CustomEvent("lily:midi", { detail: { url: cur } }));
+      setStatus("ok", "soundfont ready — SF2 engine active");
+    });
+  }
+}
 
 // Result pushed by the server after it auto-compiled a saved workspace file.
 async function showAutoCompiled(msg) {

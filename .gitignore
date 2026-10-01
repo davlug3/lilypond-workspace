@@ -2,5 +2,7 @@ node_modules/
 public/preview.*
 public/preview-*.png
 public/auto.*
+public/soundfonts/*
+!public/soundfonts/.gitkeep
 *.log
 .DS_Store

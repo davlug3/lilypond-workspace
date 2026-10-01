@@ -203,6 +203,18 @@ midi-visualizer {
   max-height: 18vh; overflow: auto;
 }
 
+/* Mixer (mute/solo per instrument) + section play/loop */
+#mixerBox { margin-bottom: 10px; }
+#sectionRow button.seg { padding: 4px 12px; font-size: 0.8rem; }
+#sectionRow button.seg.active { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 700; }
+#mixerRows { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 4px 12px; margin: 6px 0; }
+.mixrow { display: flex; gap: 6px; align-items: center; font-size: 0.8rem; padding: 2px 0; }
+.mixrow .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mixrow button { padding: 2px 8px; font-size: 0.75rem; min-width: 30px; }
+.mixrow button.on-m { background: var(--err-bg); border-color: var(--err-fg); color: var(--err-fg); font-weight: 700; }
+.mixrow button.on-s { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 700; }
+.mixrow.muted .nm { text-decoration: line-through; color: var(--muted); }
+#mixerHint { margin-top: 4px; }
 @media (max-width: 900px) {
   main { flex-direction: column; }
   .editor-pane { flex: none; }
