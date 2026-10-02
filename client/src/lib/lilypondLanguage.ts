@@ -127,7 +127,7 @@ export function registerLilypond(monaco: any) {
   ];
   try {
     languages.registerCompletionItemProvider("lilypond", {
-      triggerCharacters: ["\\\\"],
+      triggerCharacters: ["\\"],
       provideCompletionItems: () => {
         const suggestions = FALLBACK.map((kw: string) => ({
           label: kw,
