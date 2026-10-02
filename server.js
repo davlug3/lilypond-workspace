@@ -155,7 +155,30 @@ async function resolveIlyWrapper(file) {
   return sibling || null;
 }
 
+// Playback must always be possible: if the submitted code has a \score but
+// no \midi block, append an empty one inside the first \score's braces so
+// every successful compile yields a playable MIDI. Comments are ignored
+// when checking; insertion is brace-matched, not regex-guessed.
+function ensureMidiBlock(code) {
+  const src = String(code || "");
+  const stripped = src.replace(/%[^\n]*/g, "");
+  if (!/\\score\b/.test(stripped) || /\\midi\b/.test(stripped)) return src;
+  const m = /\\score\s*\{/.exec(src);
+  if (!m) return src;
+  let depth = 0;
+  for (let i = m.index + m[0].length - 1; i < src.length; i++) {
+    const c = src[i];
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) return `${src.slice(0, i)}\n  \\midi { }\n${src.slice(i)}`;
+    }
+  }
+  return src;
+}
+
 async function compileLilypond(code, name = "score") {
+  code = ensureMidiBlock(code);
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lily-"));
   const base = safeName(name);
   const lyFile = path.join(tmpDir, `${base}.ly`);

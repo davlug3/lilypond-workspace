@@ -58,6 +58,9 @@ Requires `lilypond` on PATH (you have 2.22.2). Check: `lilypond --version`.
     - *Magenta* (default): General MIDI (all instruments), Salamander grand
       piano (piano-only), Jazz Kit drums (drums-only), and an offline simple
       synth. Small streamed samples, no download wait.
+    - *Basic (offline)*: built-in WebAudio synth (oscillators + noise drums),
+      zero network. Used automatically when the Magenta CDN script fails to
+      load; also selectable by hand.
     - *SF2 (SpessaSynth)*: full SoundFont banks — bundled GeneralUser GS
       (~8 MB, all instruments), any uploaded `.sf2`/`.sf3`/`.dls` file, or a
       custom bank URL. Banks are downloaded once, then cached. Play / Pause /
@@ -98,7 +101,9 @@ Browsers can't play `.mid` natively, so the page uses the `html-midi-player`
 web component (CDN) for the Magenta engine and `spessasynth_lib` (CDN,
 pinned in the `importmap` in `public/index.html`) for the SF2 engine.
 For MIDI output you need a `\midi { }` block in your `\score`,
-e.g. `workspace/scale-midi.ly`. Without it, the MIDI tab shows "No MIDI yet" — expected.
+e.g. `workspace/scale-midi.ly` — and if you forget it, the server appends an
+empty `\midi { }` inside the first `\score` automatically, so every successful
+compile is playable.
 
 The MIDI tab also has a **mixer** (mute/solo per instrument) and **section**
 buttons (Full/Verse/Chorus + loop). Both reshape MIDI bytes in the browser

@@ -152,7 +152,13 @@ function updateDeleteBtn() {
 
 const $ = (id) => document.getElementById(id);
 const statusEl = () => $("sf2Status");
-const engineIsSf2 = () => $("engineSelect")?.value === "sf2";
+const engineIsSf2 = () => {
+  const sel = $("engineSelect");
+  // The MIDI tab mounts lazily; when it (and the select) is gone, fall back
+  // to the saved preference so background compiles still reach the engine.
+  if (sel) return sel.value === "sf2";
+  try { return localStorage.getItem("lily-engine") === "sf2"; } catch (_) { return false; }
+};
 const autoplayOn = () => $("autoplay")?.checked !== false;
 
 function setSf2Status(text) {
@@ -481,6 +487,15 @@ window.addEventListener("pointerdown", unlockOnGesture);
 window.addEventListener("keydown", unlockOnGesture);
 
 function bindControls() {
+  // React mounts the MIDI tab lazily (and remounts it on every tab
+  // switch), so this must tolerate missing elements and is safe to call
+  // again: each binding is flagged on its element. Called once at module
+  // load and again via window.SF2.bind() whenever the tab mounts.
+  const once = (el, ev, fn) => {
+    if (!el || el.dataset.sbound) return;
+    el.dataset.sbound = "1";
+    el.addEventListener(ev, fn);
+  };
   const sel = $("sf2Select");
   if (sel) {
     sel.value = savedBankKey();
@@ -497,14 +512,13 @@ function bindControls() {
     if (f0) f0.hidden = sel.value !== "custom";
     if (u0) u0.hidden = sel.value !== "url";
     if (b0) b0.hidden = sel.value !== "url";
-    sel.addEventListener("change", () => {
+    once(sel, "change", () => {
       try {
         localStorage.setItem(SF2_KEY, sel.value);
       } catch (_) {}
       updateDeleteBtn();
       loadBankByKey(sel.value).catch(() => {});
-    });
-    // Populate browser + server banks, then restore the saved selection.
+    });    // Populate browser + server banks, then restore the saved selection.
     refreshPersistentBanks().then(({ opfs, server }) => {
       const want = savedBankKey();
       if ([...sel.options].some((o) => o.value === want)) sel.value = want;
@@ -516,14 +530,14 @@ function bindControls() {
     }).catch(() => {});
   }
   const f = $("sf2File");
-  if (f) f.addEventListener("change", async () => {
+  once(f, "change", async () => {
     const file = f.files?.[0];
     if (!file) return;
     await uploadBankFile(file);
     f.value = "";
   });
   const del = $("sf2DeleteBtn");
-  if (del) del.addEventListener("click", async () => {
+  once(del, "click", async () => {
     const v = $("sf2Select")?.value || "";
     try {
       if (v.startsWith("opfs:")) {
@@ -544,9 +558,9 @@ function bindControls() {
     }
   });
   const lb = $("sf2LoadBtn");
-  if (lb) lb.addEventListener("click", () => loadBankFromUrl($("sf2Url")?.value));
+  once(lb, "click", () => loadBankFromUrl($("sf2Url")?.value));
   const play = $("sf2Play");
-  if (play) play.addEventListener("click", async () => {
+  once(play, "click", async () => {
     try {
       await ensureEngine();
       if (!currentBank) await loadBankByKey($("sf2Select")?.value || "generaluser", { prompt: false });
@@ -564,7 +578,7 @@ function bindControls() {
     }
   });
   const pause = $("sf2Pause");
-  if (pause) pause.addEventListener("click", () => {
+  once(pause, "click", () => {
     try {
       seq?.pause();
       sf2WasPlaying = false;
@@ -572,7 +586,7 @@ function bindControls() {
     } catch (_) {}
   });
   const stop = $("sf2Stop");
-  if (stop) stop.addEventListener("click", () => {
+  once(stop, "click", () => {
     try {
       if (seq?.stop) seq.stop();
       else seq?.pause();
@@ -582,7 +596,7 @@ function bindControls() {
     } catch (_) {}
   });
   const seek = $("sf2Seek");
-  if (seek) seek.addEventListener("change", () => {
+  once(seek, "change", () => {
     try {
       if (seq?.duration) seq.currentTime = (Number(seek.value) / 1000) * seq.duration;
     } catch (_) {}
@@ -603,11 +617,12 @@ window.addEventListener("lily:midi-clear", () => {
     if (seq?.stop) seq.stop();
     else seq?.pause();
   } catch (_) {}
-  if (engineIsSf2()) setSf2Status("No MIDI yet — add a `\\midi { }` block to your `\\score`.");
+  if (engineIsSf2()) setSf2Status("No MIDI — the last compile failed; fix the errors and recompile.");
 });
 
 window.SF2 = {
   loadMidi: (url) => loadMidi(url),
+  bind: () => bindControls(),
   stop: () => {
     try {
       if (seq?.stop) seq.stop();

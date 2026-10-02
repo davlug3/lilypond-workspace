@@ -28,8 +28,10 @@ client/                        React + Vite + TS + Tailwind v4 + shadcn/ui
       lilypondLanguage.ts        Monaco LilyPond language (tokenizer + completions)
   public/
     index.html
-    midi-tools.js                legacy audio engine (kept, injected after mount)
-    sf2-player.js                legacy audio engine (kept, injected after mount)
+    midi-tools.js                SMF parse/filter/slice helpers (loaded by App)
+    sf2-player.js                SpessaSynth SF2 engine (loaded by App; re-binds on tab mount)
+    midi-engine.js               playback owner: Magenta staging + mixer/section UI +
+                                 engine select + Basic offline fallback synth (loaded by App)
     lilypond-syntax.js           legacy syntax (kept, NOT injected by new App)
     palette.js / mobile-keyboard.js  legacy (kept, NOT injected by new App)
 presets/                         Source-of-truth example projects (immutable at runtime)

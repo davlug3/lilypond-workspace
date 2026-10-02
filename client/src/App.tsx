@@ -114,7 +114,7 @@ export default function App() {
       setPdfUrl(data.urls?.pdf ?? null)
       setMidiUrl(data.urls?.midi ?? null)
       if (data.urls?.midi) {
-        window.dispatchEvent(new CustomEvent('lily:midi', { detail: { url: data.urls.midi, autoplay: autoplay } }))
+        window.dispatchEvent(new CustomEvent('lily:midi', { detail: { url: data.urls.midi, autoplay: autoplay, file: selected } }))
       } else {
         window.dispatchEvent(new CustomEvent('lily:midi-clear'))
       }
@@ -183,7 +183,7 @@ export default function App() {
     }
   }
 
-  // Inject the legacy audio engine once (midi parser + SF2 player).
+  // Inject the audio engines once (midi parser, SF2 player, engine owner).
   useEffect(() => {
     if (!document.querySelector('script[src="/midi-tools.js"]')) {
       const s = document.createElement('script')
@@ -196,7 +196,21 @@ export default function App() {
       s.src = '/sf2-player.js'
       document.body.appendChild(s)
     }
+    if (!document.querySelector('script[src="/midi-engine.js"]')) {
+      const s = document.createElement('script')
+      s.src = '/midi-engine.js'
+      s.onload = () => (window as any).MIDI?.bind?.()
+      document.body.appendChild(s)
+    }
   }, [])
+
+  // The MIDI tab mounts lazily: (re)bind engine controls whenever it
+  // appears, and hand it the current MIDI (no autoplay on tab switches).
+  useEffect(() => {
+    const M = (window as any).MIDI
+    M?.bind?.()
+    if (tab === 'midi' && midiUrl) M?.load?.(midiUrl, { autoplay: false })
+  }, [tab, midiUrl])
 
   useEffect(() => {
     fetch('/api/version').then((r) => r.json()).then((j) => setVersion(j.version)).catch(() => setVersion('lilypond not found'))
@@ -219,7 +233,7 @@ export default function App() {
             setPdfUrl(msg.pdfUrl ?? null)
             setMidiUrl(msg.midiUrl ?? null)
             setStatus({ state: 'ok', text: `${msg.pages} page(s)${msg.label ? ` (${msg.label})` : ''}` })
-            if (msg.midiUrl) window.dispatchEvent(new CustomEvent('lily:midi', { detail: { url: msg.midiUrl, autoplay } }))
+            if (msg.midiUrl) window.dispatchEvent(new CustomEvent('lily:midi', { detail: { url: msg.midiUrl, autoplay, file: msg.file } }))
           } else {
             setErrorLines((msg.log ?? '').split('\n').filter((l: string) => /error|fatal/i.test(l)))
             setStale(hasGood)
@@ -623,7 +637,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
                 <a id="dlMidi" href={midiUrl ?? '#'} className="text-primary underline" download="preview.midi">Download MIDI</a>
                 <button id="sf2UploadBtn" className="underline">Upload soundfont</button>
                 <input id="sf2UploadFile" type="file" accept=".sf2,.sf3,.dls,.sfogg" hidden />
-                <label>Engine <select id="engineSelect" className="border rounded px-1"><option value="magenta">Magenta</option><option value="sf2">SF2</option></select></label>
+                <label>Engine <select id="engineSelect" className="border rounded px-1"><option value="magenta">Magenta</option><option value="basic">Basic (offline)</option><option value="sf2">SF2</option></select></label>
                 <label id="magentaSfWrap">Sound <select id="sfSelect" className="border rounded px-1"><option value="sgm">General MIDI</option><option value="salamander">Salamander</option><option value="jazz">Jazz Kit</option><option value="synth">Synth</option></select></label>
                 <label id="sf2Wrap" hidden>Bank <select id="sf2Select" className="border rounded px-1"><option value="generaluser">GeneralUser GS</option><option value="custom">Uploaded file…</option><option value="url">Custom URL…</option></select></label>
               </div>
@@ -641,7 +655,15 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
               <div id="midiBox">
                 {createElement('midi-player', { id: 'midiPlayer' })}
                 {createElement('midi-visualizer', { id: 'midiViz', type: 'piano-roll' })}
-                <p id="noMidi" className="text-muted-foreground">No MIDI yet — add a <code>\midi { }</code> block.</p>
+                <p id="noMidi" className="text-muted-foreground">No MIDI yet — compile the score first.</p>
+              </div>
+              <div id="basicBox" hidden>
+                <div className="flex items-center gap-2 mb-2">
+                  <Button id="basicPlay" size="sm">Play</Button>
+                  <Button id="basicStop" variant="outline" size="sm">Stop</Button>
+                  <span id="basicTime" className="text-xs font-mono">0:00 / 0:00</span>
+                </div>
+                <p className="text-xs text-muted-foreground">Built-in synth — no network needed, plain GM-style tones.</p>
               </div>
               <div id="sf2Box" hidden>
                 <div className="flex items-center gap-2 mb-2">
@@ -659,6 +681,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
                 </div>
                 <p id="sf2Status" className="text-sm text-muted-foreground">SF2 engine idle.</p>
               </div>
+              <p id="midiStatus" className="text-sm text-muted-foreground mt-2" aria-live="polite">MIDI idle — compile the score first.</p>
             </div>
           )}
         </section>
