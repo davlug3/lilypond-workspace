@@ -470,15 +470,20 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
             <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border-t">
               <section className="p-3 border-r">
                 <h3 className="text-xs uppercase text-muted-foreground mb-2">Presets <span className="normal-case">read-only</span></h3>
-                <ul className="space-y-1 text-sm max-h-48 overflow-auto">
+                <select
+                  className="border rounded p-2 text-sm w-full"
+                  defaultValue=""
+                  aria-label="Load a preset"
+                  onChange={(e) => {
+                    if (e.target.value) onPresetUse(e.target.value)
+                    e.target.value = ""
+                  }}
+                >
+                  <option value="" disabled>Choose a preset…</option>
                   {presets.map((p) => (
-                    <li key={p.name} className="flex items-center justify-between gap-2">
-                      <span>{p.name}</span>
-                      <span className="text-xs text-muted-foreground">{p.files.length} files</span>
-                      <Button size="sm" onClick={() => onPresetUse(p.name)}>Use</Button>
-                    </li>
+                    <option key={p.name} value={p.name}>{p.name} ({p.files.length} files)</option>
                   ))}
-                </ul>
+                </select>
               </section>
               <section className="p-3">
                 <h3 className="text-xs uppercase text-muted-foreground mb-2">Workspace</h3>
