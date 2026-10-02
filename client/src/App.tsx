@@ -50,7 +50,7 @@ export default function App() {
   const [presets, setPresets] = useState<{ name: string; files: string[] }[]>([])
   const [scaffoldKind, setScaffoldKind] = useState<'part' | 'staff' | 'instrument' | 'voice' | 'polyphony'>('part')
   const { theme, setTheme } = useTheme()
-  const monacoTheme = theme === 'dark' ? 'vs-dark' : theme === 'light' ? 'vs' : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'vs-dark' : 'vs')
+  const monacoTheme = theme === 'dark' ? 'lilypond-dark' : theme === 'light' ? 'lilypond-light' : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'lilypond-dark' : 'lilypond-light')
   const [code, setCode] = useState('')
   const [split, setSplit] = useState(50)
   const [pngOpacity, setPngOpacity] = useState(() => { try { return Number(localStorage.getItem('pngOpacity') ?? 1) } catch { return 1 } })
@@ -390,6 +390,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
               onMount={(editor, monaco) => {
                 registerLilypond(monaco)
                 if (editor.getModel()) monaco.editor.setModelLanguage(editor.getModel(), 'lilypond')
+                monaco.editor.setTheme(monacoTheme)
               }}
               value={code}
               onChange={(value) => setCode(value ?? '')}

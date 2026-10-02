@@ -2,6 +2,24 @@ export function registerLilypond(monaco: any) {
   const languages = monaco.languages;
 
   try {
+    // Derived themes: stock colouring everywhere except comments (grey).
+    monaco.editor.defineTheme("lilypond-light", {
+      base: "vs",
+      inherit: true,
+      rules: [{ token: "comment", foreground: "6b7280" }],
+      colors: {},
+    });
+    monaco.editor.defineTheme("lilypond-dark", {
+      base: "vs-dark",
+      inherit: true,
+      rules: [{ token: "comment", foreground: "8b93a1" }],
+      colors: {},
+    });
+  } catch (_e) {
+    // themes already defined; re-define is a no-op
+  }
+
+  try {
     languages.register({
       id: "lilypond",
       extensions: [".ly", ".ily"],
