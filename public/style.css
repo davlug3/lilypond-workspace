@@ -284,3 +284,145 @@ midi-visualizer {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }
 }
+
+/* ---- mobile virtual keyboard ------------------------------------------ */
+#mobileKeyboard {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  padding: 6px 6px env(safe-area-inset-bottom);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 900;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+#mobileKeyboard[hidden] { display: none !important; }
+.mk-row { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; }
+.mk-key {
+  min-height: 52px; min-width: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--fg);
+  font-size: 14px; line-height: 1;
+  padding: 0 10px;
+  touch-action: manipulation;
+  user-select: none;
+  position: relative;
+}
+.mk-key:active { transform: scale(0.95); background: var(--border); }
+.mk-key[data-hint]::after {
+  content: attr(data-hint);
+  font-size: 9px; color: var(--muted); margin-left: 4px; opacity: 0.75;
+}
+.mk-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 700; }
+.mk-wide { flex: 1 1 25%; }
+.mk-bottombar {
+  display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;
+  border-top: 1px solid var(--border); padding-top: 4px; margin-top: 2px;
+}
+.mk-bb { min-width: 52px; flex: 1 1 auto; max-width: 110px; font-size: 12px; }
+#mkToggle {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card); color: var(--fg); cursor: pointer;
+}
+.mk-picker {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.92);
+  display: flex; flex-direction: column;
+}
+.mk-picker[hidden] { display: none; }
+.mk-picker-head {
+  display: flex; gap: 8px; padding: 12px;
+  padding-top: calc(12px + env(safe-area-inset-top));
+  border-bottom: 1px solid var(--border);
+}
+.mk-search {
+  flex: 1; padding: 10px 12px; font-size: 16px;
+  background: var(--card); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.mk-picker-list {
+  flex: 1; overflow-y: auto; padding: 12px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px; align-content: start;
+}
+.mk-picker-item {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px; text-align: left;
+  background: var(--card); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 8px;
+  font-size: 14px;
+}
+.mk-picker-item:active { background: var(--border); }
+.mk-picker-cat { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.mk-picker-cmd { font-family: var(--font-code); }
+.mk-picker-empty { grid-column: 1 / -1; color: var(--muted); padding: 20px; text-align: center; }
+@media (max-width: 480px) {
+  .mk-key { min-height: 50px; min-width: 40px; font-size: 13px; padding: 0 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mk-key { transition: none; }
+  .mk-key:active { transform: none; }
+}
+
+/* ---- directory panel: presets + workspace tree -------------------------- */
+.dir-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  margin: 4px 0 10px;
+  font-size: 0.85rem;
+}
+.dir-panel > summary {
+  cursor: pointer;
+  padding: 8px 12px;
+  font-weight: 600;
+  user-select: none;
+}
+.dir-split {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+.dir-presets, .dir-workspace { padding: 10px 12px; }
+.dir-presets { border-right: 1px solid var(--border); }
+.dir-presets h3, .dir-workspace h3 { margin: 0 0 8px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.dir-sub { text-transform: none; letter-spacing: 0; color: var(--muted); font-weight: 400; font-size: 0.75rem; }
+.dir-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.dir-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg);
+}
+.dir-item .dir-name { font-weight: 600; font-family: var(--font-code); font-size: 0.8rem; }
+.dir-item .dir-count { color: var(--muted); font-size: 0.75rem; flex: 1 1 auto; }
+.dir-use {
+  padding: 4px 12px; border-radius: 6px; border: 1px solid var(--primary);
+  background: var(--primary); color: var(--on-primary); font-size: 0.75rem; cursor: pointer;
+}
+.dir-use:active { transform: scale(0.96); }
+.dir-rm {
+  margin-left: 8px; padding: 0 6px; border: none; background: transparent;
+  color: var(--muted); cursor: pointer; font-size: 0.75rem;
+}
+.dir-rm:hover { color: var(--err-fg); }
+.tree-node { padding-left: calc(var(--depth) * 12px); }
+.tree-children { padding-left: 12px; border-left: 1px dashed var(--border); margin-left: 6px; }
+.tree-node summary, .tree-file { cursor: pointer; padding: 2px 4px; border-radius: 4px; font-family: var(--font-code); font-size: 0.78rem; }
+.tree-node summary:hover, .tree-file:hover { background: var(--bg); }
+.tree-file {
+  display: block; width: 100%; text-align: left; border: none; background: transparent;
+  color: var(--fg); padding: 2px 4px;
+}
+.tree-file:hover { background: var(--bg); }
+.dir-empty { color: var(--muted); font-size: 0.8rem; padding: 6px 0; }
+@media (max-width: 700px) {
+  .dir-split { grid-template-columns: 1fr; }
+  .dir-presets { border-right: none; border-bottom: 1px solid var(--border); }
+}

@@ -1,0 +1,22 @@
+{
+  "version": "1.0",
+  "description": "Mobile-optimized virtual keyboard for LilyPond input. Touch targets >=48px, thumb-zone layout, context-aware layers.",
+  "designPrinciples": [
+    "Primary layer = 95% of keystrokes in verified corpus",
+    "Long-press for secondary symbols",
+    "Scope-aware layers: note | chord | lyric | markup | scheme",
+    "Templates as single-tap inserts (replace-all with confirm)",
+    "Bar check | dedicated prominent key",
+    "Command picker reads window.LILYPOND_SYNTAX (238 verified entries)"
+  ],
+  "touchSpecs": {
+    "minTargetSize": 48,
+    "keyHeight": 52,
+    "keyGap": 4,
+    "longPressDelay": 350,
+    "hapticFeedback": true
+  },
+  "layers": ["note", "chord", "lyric", "markup", "scheme"],
+  "commandsSource": "window.LILYPOND_SYNTAX (public/lilypond-syntax.js)",
+  "templatesSource": "window.LILYPOND_SYNTAX categories: templates"
+}

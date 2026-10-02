@@ -50,6 +50,19 @@
       <button id="compileBtn" class="primary">Compile ▶</button>
       <button id="palToggle" title="Show or hide the syntax palette" aria-expanded="true">Palette</button>
     </div>
+    <details id="dirPanel" class="dir-panel" open>
+      <summary>Files &amp; presets</summary>
+      <div class="dir-split">
+        <section class="dir-presets">
+          <h3>Presets <span class="dir-sub">read-only · copy into workspace</span></h3>
+          <ul id="presetList" class="dir-list"></ul>
+        </section>
+        <section class="dir-workspace">
+          <h3>Workspace <span class="dir-sub">writable edits live here</span></h3>
+          <div id="workspaceTree" class="dir-tree"></div>
+        </section>
+      </div>
+    </details>
     <textarea id="editor" spellcheck="false" placeholder="Type LilyPond code here…"></textarea>
     <details open>
       <summary>Compiler log</summary>
@@ -151,10 +164,13 @@
   </section>
 </main>
 
+<div id="mobileKeyboard" role="application" aria-label="LilyPond virtual keyboard" hidden></div>
+
 <script src="/midi-tools.js"></script>
 <script src="/lilypond-syntax.js"></script>
 <script src="/app.js"></script>
 <script src="/palette.js"></script>
+<script src="/mobile-keyboard.js"></script>
 <script type="module" src="/sf2-player.js"></script>
 </body>
 </html>

@@ -9,6 +9,118 @@ const dlPng = $("dlPng"), dlPdf = $("dlPdf"), dlMidi = $("dlMidi");
 let debounce = null;
 let lastCode = "";
 
+// ---- Directory panel: presets (read-only) + workspace tree --------------
+const presetListEl = $("presetList");
+const workspaceTreeEl = $("workspaceTree");
+
+async function refreshPresets() {
+  if (!presetListEl) return;
+  try {
+    const { presets } = await api("/api/presets");
+    presetListEl.innerHTML = "";
+    if (!presets.length) {
+      presetListEl.innerHTML = '<li class="dir-empty">No presets in ./presets</li>';
+      return;
+    }
+    for (const p of presets) {
+      const li = document.createElement("li");
+      li.className = "dir-item";
+      const label = document.createElement("span");
+      label.className = "dir-name";
+      label.textContent = p.name;
+      const meta = document.createElement("span");
+      meta.className = "dir-count";
+      meta.textContent = `${p.files.length} file${p.files.length === 1 ? "" : "s"}`;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = "Use";
+      btn.className = "dir-use";
+      btn.title = `Copy "${p.name}" into the workspace`;
+      btn.onclick = async () => {
+        try {
+          const r = await api("/api/presets/use", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: p.name }),
+          });
+          logEl.textContent = `Copied preset "${p.name}" to workspace (${r.files.length} files).`;
+          await refreshTree();
+          await refreshFiles(r.files[0]);
+          if (r.files && r.files.length) {
+            await loadFile(r.files[0]);
+          }
+        } catch (e) {
+          logEl.textContent = "Preset use failed: " + e.message + " (a workspace item with that name may already exist)";
+        }
+      };
+      li.appendChild(label);
+      li.appendChild(meta);
+      li.appendChild(btn);
+      presetListEl.appendChild(li);
+    }
+  } catch (e) { console.warn(e); }
+}
+
+function renderTreeFile(f, depth) {
+  const el = document.createElement("button");
+  el.type = "button";
+  el.className = "tree-file";
+  el.style.setProperty("--depth", depth);
+  el.textContent = f.name;
+  el.title = f.path;
+  el.onclick = () => loadFile(f.path);
+  return el;
+}
+
+function renderTreeDir(node, depth) {
+  const wrap = document.createElement("div");
+  wrap.className = "tree-node";
+  wrap.style.setProperty("--depth", depth);
+  const det = document.createElement("details");
+  det.open = depth === 0;
+  const sum = document.createElement("summary");
+  sum.textContent = (node.name || "workspace") + "/";
+  const inner = document.createElement("div");
+  inner.className = "tree-children";
+  for (const d of node.dirs || []) inner.appendChild(renderTreeDir(d, depth + 1));
+  for (const f of node.files || []) inner.appendChild(renderTreeFile(f, depth + 1));
+  det.appendChild(inner);
+  wrap.appendChild(det);
+  // Top-level directory entries get a remove button (deletes a copied preset).
+  if (depth === 0 && node.path) {
+    const rm = document.createElement("button");
+    rm.type = "button";
+    rm.className = "dir-rm";
+    rm.title = `Delete "${node.path}" from workspace`;
+    rm.textContent = "\u2715";
+    rm.onclick = async (ev) => {
+      ev.preventDefault();
+      if (!confirm(`Delete "${node.path}" from the workspace?`)) return;
+      try {
+        await api(`/api/tree-entry?name=${encodeURIComponent(node.path)}`, { method: "DELETE" });
+        await refreshTree();
+        await refreshFiles();
+      } catch (e) { logEl.textContent = "Delete failed: " + e.message; }
+    };
+    sum.appendChild(rm);
+  }
+  return wrap;
+}
+
+async function refreshTree() {
+  if (!workspaceTreeEl) return;
+  try {
+    const { tree } = await api("/api/tree");
+    workspaceTreeEl.innerHTML = "";
+    if (!tree.dirs.length && !tree.files.length) {
+      workspaceTreeEl.innerHTML = '<div class="dir-empty">Workspace is empty — pick a preset above.</div>';
+      return;
+    }
+    for (const d of tree.dirs) workspaceTreeEl.appendChild(renderTreeDir(d, 0));
+    for (const f of tree.files) workspaceTreeEl.appendChild(renderTreeFile(f, 0));
+  } catch (e) { console.warn(e); }
+}
+
 function setStatus(state, text) {
   statusEl.className = "status " + state;
   statusEl.textContent = text;
@@ -727,6 +839,7 @@ $("newBtn").onclick = async () => {
     body: JSON.stringify({ code: editor.value || '% new score\n\\version "2.22.2"\n{ c4 d e f }\n' }),
   });
   await refreshFiles(safe);
+  refreshTree();
   loadFile(safe);
 };
 
@@ -760,6 +873,7 @@ try {
         refreshFiles(fileSelect.value);
         return;
       }
+      refreshTree();
       if (msg.type !== "auto-compiled") return;
       if (followBox.checked && msg.file === fileSelect.value) {
         $("watchNotice").hidden = true;
@@ -776,6 +890,7 @@ try {
           }
         );
         refreshFiles(fileSelect.value);
+        refreshTree();
       }
     } catch (_) {}
   };
@@ -793,6 +908,8 @@ try {
     $("version").textContent = v.version;
   } catch { $("version").textContent = "lilypond not found?"; }
   await refreshFiles();
+  await refreshTree();
+  await refreshPresets();
   pinWatchFile();
   if (fileSelect.value) await loadFile(fileSelect.value);
   else {

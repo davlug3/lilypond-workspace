@@ -9,6 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const WORKSPACE_DIR = path.join(ROOT, "workspace");
+const PRESETS_DIR = path.join(ROOT, "presets");
 const PUBLIC_DIR = path.join(ROOT, "public");
 const SOUNDFONTS_DIR = path.join(PUBLIC_DIR, "soundfonts");
 const SF_EXTS = new Set([".sf2", ".sf3", ".dls", ".sfogg"]);
@@ -171,6 +172,110 @@ app.get("/api/version", (_req, res) => {
   });
 });
 
+// ---- Presets (read-only, never written through the server) ----
+// A preset is a top-level entry in ./presets: a directory (project with
+// parts/) or a single .ly file. Selecting one copies it into ./workspace.
+
+async function listPresetFiles(dir, rel = "") {
+  const out = [];
+  async function walk(d, r) {
+    let entries;
+    try { entries = await fs.readdir(d, { withFileTypes: true }); } catch (_) { return; }
+    for (const e of entries) {
+      if (e.name.startsWith(".")) continue;
+      const rr = r ? `${r}/${e.name}` : e.name;
+      if (e.isDirectory()) await walk(path.join(d, e.name), rr);
+      else if (e.isFile() && /\.(ly|ily)$/i.test(e.name)) out.push(rr);
+    }
+  }
+  await walk(dir, rel);
+  return out.sort();
+}
+
+async function listPresets() {
+  let entries;
+  try { entries = await fs.readdir(PRESETS_DIR, { withFileTypes: true }); } catch (_) { return []; }
+  const presets = [];
+  for (const e of entries) {
+    if (e.name.startsWith(".")) continue;
+    const full = path.join(PRESETS_DIR, e.name);
+    if (e.isDirectory()) {
+      const files = await listPresetFiles(full, e.name);
+      if (files.length) presets.push({ name: e.name, kind: "directory", files });
+    } else if (e.isFile() && e.name.endsWith(".ly")) {
+      presets.push({ name: e.name, kind: "file", files: [e.name] });
+    }
+  }
+  return presets.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Workspace tree: directories containing .ly/.ily files, nested.
+async function workspaceTree() {
+  async function walk(dir, rel) {
+    let entries;
+    try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch (_) { return null; }
+    const dirs = [];
+    const files = [];
+    for (const e of entries) {
+      if (e.name.startsWith(".") || e.name === "node_modules") continue;
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) {
+        const sub = await walk(path.join(dir, e.name), r);
+        if (sub && (sub.files.length || sub.dirs.length)) dirs.push(sub);
+      } else if (e.isFile() && /\.(ly|ily)$/i.test(e.name)) {
+        files.push({ name: e.name, path: r });
+      }
+    }
+    dirs.sort((a, b) => a.name.localeCompare(b.name));
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    return { name: rel ? rel.split("/").pop() : "workspace", path: rel, dirs, files };
+  }
+  return (await walk(WORKSPACE_DIR, "")) || { name: "workspace", path: "", dirs: [], files: [] };
+}
+
+// Resolve a preset name safely inside PRESETS_DIR.
+function resolvePreset(raw) {
+  const norm = path.normalize(String(raw || ""));
+  if (!norm || norm.startsWith("..") || path.isAbsolute(norm)) return null;
+  const full = path.join(PRESETS_DIR, norm);
+  if (full !== PRESETS_DIR && !full.startsWith(PRESETS_DIR + path.sep)) return null;
+  return { full, name: norm.split(path.sep)[0] };
+}
+
+app.get("/api/presets", async (_req, res) => {
+  try { res.json({ presets: await listPresets() }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get("/api/tree", async (_req, res) => {
+  try { res.json({ tree: await workspaceTree() }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/presets/use", async (req, res) => {
+  const target = resolvePreset(req.body?.name);
+  if (!target) return res.status(400).json({ error: "missing or invalid preset name" });
+  try {
+    const stat = await fs.stat(target.full);
+    const dest = path.join(WORKSPACE_DIR, target.name);
+    // Refuse to clobber an existing workspace entry of the same name.
+    try { await fs.lstat(dest); return res.status(409).json({ error: `workspace already contains "${target.name}"; delete it first` }); }
+    catch (_) { /* does not exist yet */ }
+    const mode = req.body?.mode === "move" ? "move" : "copy";
+    if (mode === "move") {
+      // Move is not allowed: presets must stay immutable. Always copy.
+    }
+    await fs.cp(target.full, dest, { recursive: true });
+    // Copied files must be writable in the workspace.
+    const { execFile: ef } = require("child_process");
+    ef("chmod", ["-R", "u+w", dest], () => {});
+    const files = stat.isDirectory() ? await listPresetFiles(dest, target.name) : [target.name];
+    res.json({ ok: true, name: target.name, kind: stat.isDirectory() ? "directory" : "file", files });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get("/api/files", async (_req, res) => {
   try {
     res.json({ files: await listLyFiles() });
@@ -197,6 +302,34 @@ app.put("/api/file", async (req, res) => {
     await fs.mkdir(path.dirname(target.full), { recursive: true });
     await fs.writeFile(target.full, String(req.body?.code ?? ""), "utf8");
     res.json({ ok: true, name: target.rel });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete("/api/file", async (req, res) => {
+  const target = resolveLy(req.query.name || req.body?.name);
+  if (!target) return res.status(400).json({ error: "missing ?name=*.ly (workspace-relative path)" });
+  try {
+    await fs.rm(target.full, { recursive: true, force: true });
+    res.json({ ok: true, name: target.rel });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete("/api/tree-entry", async (req, res) => {
+  // Remove a top-level workspace entry (e.g. a copied preset directory).
+  const raw = String(req.query.name || req.body?.name || "");
+  const norm = path.normalize(raw);
+  if (!norm || norm === "." || norm.startsWith("..") || path.isAbsolute(norm) || norm.includes(path.sep)) {
+    return res.status(400).json({ error: "name must be a top-level workspace entry" });
+  }
+  const full = path.join(WORKSPACE_DIR, norm);
+  if (!full.startsWith(WORKSPACE_DIR + path.sep)) return res.status(400).json({ error: "invalid name" });
+  try {
+    await fs.rm(full, { recursive: true, force: true });
+    res.json({ ok: true, name: norm });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
