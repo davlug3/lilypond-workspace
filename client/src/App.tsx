@@ -11,6 +11,24 @@ declare global {
   }
 }
 
+function TreeFiles({ node, depth, selected, onOpen }: { node: any; depth: number; selected: string; onOpen: (p: string) => void }) {
+  return (
+    <>
+      {node.dirs.map((d: any) => (
+        <details key={d.path} open={depth < 1}>
+          <summary className="cursor-pointer font-medium hover:underline">{d.name}/</summary>
+          <div className="pl-4">
+            <TreeFiles node={d} depth={depth + 1} selected={selected} onOpen={onOpen} />
+          </div>
+        </details>
+      ))}
+      {node.files.map((f: any) => (
+        <button key={f.path} type="button" className={`block w-full text-left py-0.5 hover:underline cursor-pointer ${f.path === selected ? 'font-semibold text-primary' : ''}`} onClick={() => onOpen(f.path)}>{f.name}</button>
+      ))}
+    </>
+  )
+}
+
 export default function App() {
   const [version, setVersion] = useState('checking lilypond…')
   const [status, setStatus] = useState<{ state: 'idle' | 'busy' | 'ok' | 'err'; text: string }>({ state: 'idle', text: 'idle' })
@@ -361,31 +379,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
                 <div id="workspaceTree" className="text-sm max-h-64 overflow-auto">
                   {tree && (tree.dirs.length > 0 || tree.files.length > 0) ? (
                     <ul className="space-y-0.5">
-                      {tree.dirs.map((d: any) => (
-                        <li key={d.path}>
-                          <details open>
-                            <summary className="cursor-pointer font-medium hover:underline">{d.name}/</summary>
-                            <div className="pl-4">
-                              {d.dirs.map((dd: any) => (
-                                <details key={dd.path}>
-                                  <summary className="cursor-pointer font-medium hover:underline">{dd.name}/</summary>
-                                  <div className="pl-4">
-                                    {dd.files.map((f: any) => (
-                                      <button key={f.path} type="button" className="block w-full text-left py-0.5 hover:underline cursor-pointer" onClick={() => loadFile(f.path)}>{f.name}</button>
-                                    ))}
-                                  </div>
-                                </details>
-                              ))}
-                              {d.files.map((f: any) => (
-                                <button key={f.path} type="button" className="block w-full text-left py-0.5 hover:underline cursor-pointer" onClick={() => loadFile(f.path)}>{f.name}</button>
-                              ))}
-                            </div>
-                          </details>
-                        </li>
-                      ))}
-                      {tree.files.map((f: any) => (
-                        <button key={f.path} type="button" className="block w-full text-left py-0.5 hover:underline cursor-pointer" onClick={() => loadFile(f.path)}>{f.name}</button>
-                      ))}
+                      <TreeFiles node={tree} depth={0} selected={selected} onOpen={loadFile} />
                     </ul>
                   ) : (
                     <p className="text-muted-foreground">Empty — pick a preset.</p>

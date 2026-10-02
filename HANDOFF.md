@@ -161,12 +161,12 @@ vocals-backing/` directories (content moved into `sections/`).
       verified byte-identical to old `08-full-band.ly`.
 
 ### Medium priority
-- [ ] Tokenize LilyPond command groups in `lilypondLanguage.ts`
-      (`\header`, `\score`, `\new`, `\include`, `\relative`, `\layout`, `\midi`,
-      `\paper`, `\with`, etc.) → distinct token scopes.
-- [ ] Add snippet completions for common commands.
-- [ ] Wire workspace tree → Monaco tab/file switch (click a tree node opens it
-      in the editor; track selected).
+- [x] Tokenize LilyPond command groups in `lilypondLanguage.ts`
+      (structural=`keyword`, \new/\context/\with=`type`, music setters=`function`,
+      mode switches=`constant`, dynamics/voices=`variable`).
+- [x] Add snippet completions for common commands.
+- [x] Wire workspace tree → Monaco tab/file switch (recursive tree,
+      click a node opens it in the editor, selected file highlighted).
 - [ ] Update `README.md` (project layout, rock-band-2 restructure).
 
 ### Low priority
@@ -203,6 +203,11 @@ cd client && npx eslint src --max-warnings 0
 ### Verification status (last session)
 - `client/src/lib/lilypondLanguage.ts` trigger fix: `tsc` ✓, `npm run build` ✓.
 - `rock-band-2` restructure: `lilypond full-band.ly` ✓, MIDI identical to old render ✓.
+- Command-group tokenizer + snippet completions + recursive tree:
+  `tsc -b` ✓, `vite build` ✓, oxlint (no errors) ✓.
+  (Note: npm bin shims in `client/node_modules/.bin` don't execute on this
+  Termux shell; run `node node_modules/typescript/bin/tsc -b` and
+  `node node_modules/vite/bin/vite.js build` instead.)
 
 ## Contact / context
 
