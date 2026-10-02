@@ -1,5 +1,6 @@
 import { createElement, useEffect, useRef, useState } from 'react'
 import { Editor } from '@monaco-editor/react'
+import { registerLilypond } from '@/lib/lilypondLanguage'
 import { useTheme } from '@/components/theme-provider'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -398,7 +399,11 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
             <Editor
               theme={monacoTheme}
               height="100%"
-              defaultLanguage="plaintext"
+              defaultLanguage="lilypond"
+              onMount={(editor, monaco) => {
+                registerLilypond(monaco)
+                if (editor.getModel()) monaco.editor.setModelLanguage(editor.getModel(), 'lilypond')
+              }}
               value={code}
               onChange={(value) => setCode(value ?? '')}
               options={{ minimap: { enabled: false }, fontSize: 13, wordWrap: 'on' }}
