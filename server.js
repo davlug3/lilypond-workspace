@@ -98,6 +98,63 @@ function runLilypond(inputFile, outPrefix, dirs) {
   });
 }
 
+// Walk workspace .ly/.ily files and build rel-path -> content map.
+async function listSourceFiles() {
+  const out = [];
+  async function walk(dir, rel) {
+    let entries;
+    try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch (_) { return; }
+    for (const e of entries) {
+      if (e.name.startsWith(".") || e.name === "node_modules") continue;
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) await walk(path.join(dir, e.name), r);
+      else if (e.isFile() && /\.(ly|ily)$/i.test(e.name)) out.push(r);
+    }
+  }
+  await walk(WORKSPACE_DIR, "");
+  return out;
+}
+
+// Find a compilable .ly wrapper for an .ily fragment.
+// 1) sibling .ly in the same directory (legacy behavior)
+// 2) any .ly whose \include graph references the .ily (prefer "full", then
+//    shallower paths, then alphabetical)
+// Returns workspace-relative path or null.
+async function resolveIlyWrapper(file) {
+  const rel = String(file || "").split(path.sep).join("/");
+  if (!/\.ily$/i.test(rel)) return null;
+  const dir = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "";
+  const sources = await listSourceFiles();
+  const sibling = sources.find((f) => f.toLowerCase().endsWith(".ly") && (dir ? f.startsWith(dir + "/") && !f.slice(dir.length + 1).includes("/") : !f.includes("/")));
+  try {
+    const ilyFull = path.join(WORKSPACE_DIR, rel);
+    const matches = [];
+    for (const f of sources) {
+      if (!f.toLowerCase().endsWith(".ly")) continue;
+      let content;
+      try { content = await fs.readFile(path.join(WORKSPACE_DIR, f), "utf8"); } catch (_) { continue; }
+      const re = /\\include\s+"([^"]+)"/g;
+      let m;
+      while ((m = re.exec(content))) {
+        const target = path.normalize(path.join(path.dirname(f), m[1])).split(path.sep).join("/");
+        if (target === rel) { matches.push(f); break; }
+      }
+    }
+    if (matches.length) {
+      matches.sort((a, b) => {
+        const fa = /full/i.test(a) ? 0 : 1;
+        const fb = /full/i.test(b) ? 0 : 1;
+        if (fa !== fb) return fa - fb;
+        const da = a.split("/").length, db = b.split("/").length;
+        if (da !== db) return da - db;
+        return a.localeCompare(b);
+      });
+      return matches[0];
+    }
+  } catch (_) { /* fall through */ }
+  return sibling || null;
+}
+
 async function compileLilypond(code, name = "score") {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lily-"));
   const base = safeName(name);
@@ -400,8 +457,18 @@ app.delete("/api/soundfonts/:name", async (req, res) => {
 // Main compile endpoint: { code, name? }
 // Returns JSON with data URLs + also writes latest to public/preview.* for direct <img>/<iframe> use.
 app.post("/api/compile", async (req, res) => {
-  const code = String(req.body?.code ?? "");
-  const name = String(req.body?.name || "score");
+  let code = String(req.body?.code ?? "");
+  let name = String(req.body?.name || "score");
+  if (/\.ily$/i.test(name)) {
+    const wrapper = await resolveIlyWrapper(name);
+    if (wrapper) {
+      try {
+        const wrapperCode = await fs.readFile(path.join(WORKSPACE_DIR, wrapper), "utf8");
+        code = wrapperCode;
+        name = wrapper;
+      } catch (_) { /* fall back to posted code */ }
+    }
+  }
   if (!code.trim()) return res.status(400).json({ success: false, log: "Empty score." });
   try {
     const result = await compileLilypond(code, name);
@@ -410,6 +477,7 @@ app.post("/api/compile", async (req, res) => {
     res.json({
       success: result.success,
       log: result.log,
+      name,
       pdf: result.pdf ? toDataUrl(result.pdf, "application/pdf") : null,
       midi: result.midi ? toDataUrl(result.midi, "audio/midi") : null,
       pngs: result.pngs.map((p) => toDataUrl(p.data, "image/png")),
@@ -479,7 +547,16 @@ async function autoCompileFile(file) {
       return;
     }
     console.log(`  Auto-compiling ${file}…`);
-    const result = await compileLilypond(code, file);
+    // An .ily save actually compiles its resolved wrapper.
+    let target = file;
+    let compileCode = code;
+    if (/\.ily$/i.test(file)) {
+      const wrapper = await resolveIlyWrapper(file);
+      if (wrapper) {
+        try { compileCode = await fs.readFile(path.join(WORKSPACE_DIR, wrapper), "utf8"); target = wrapper; } catch (_) { /* keep raw */ }
+      }
+    }
+    const result = await compileLilypond(compileCode, target);
     const urls = await publishPreview(result);
     broadcast({
       type: "auto-compiled",

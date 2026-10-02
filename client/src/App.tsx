@@ -97,29 +97,22 @@ export default function App() {
   const runCompile = async () => {
     if (!code.trim()) return
     setStatus({ state: 'busy', text: 'compiling…' })
-    // `.ily` files are fragments; compile the sibling `.ly` wrapper instead
+    // `.ily` files are fragments; the server resolves their compilable
+    // wrapper (sibling .ly, else the .ly whose \include graph references
+    // them, preferring a "full" one) and compiles that instead.
     let compileCode = code
     let compileName = selected || 'score'
     if (selected && selected.toLowerCase().endsWith('.ily')) {
-      const selectedDir = selected.includes('/') ? selected.substring(0, selected.lastIndexOf('/')) : ''
-      const sibling = files.find((f) => {
-        const fDir = f.includes('/') ? f.substring(0, f.lastIndexOf('/')) : ''
-        return fDir === selectedDir && f.toLowerCase().endsWith('.ly')
-      })
-      if (sibling) {
-        try {
-          // Save the edited ily so the wrapper's \include picks it up.
-          await api(`/api/file?name=${encodeURIComponent(selected)}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code }),
-          })
-          const j = await api(`/api/file?name=${encodeURIComponent(sibling)}`)
-          compileCode = j.code
-          compileName = sibling
-        } catch {
-          /* fall back to compiling the ily itself */
-        }
+      try {
+        // Save the edited ily so the wrapper's \include picks it up.
+        await api(`/api/file?name=${encodeURIComponent(selected)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code }),
+        })
+        compileCode = ''
+      } catch {
+        /* fall back to compiling the ily itself */
       }
     }
     try {
@@ -132,7 +125,7 @@ export default function App() {
       setStale(false)
       if (data.success) {
         setHasGood(true)
-        setStatus({ state: 'ok', text: `${data.pages} page(s)${compileName !== selected ? ` (compiled ${compileName})` : ''}` })
+        setStatus({ state: 'ok', text: `${data.pages} page(s)${data.name && data.name !== compileName ? ` (compiled ${data.name})` : ''}` })
         setPngUrls(data.pngs ?? [])
         setPdfUrl(data.urls?.pdf ?? null)
         setMidiUrl(data.urls?.midi ?? null)
