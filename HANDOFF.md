@@ -211,7 +211,7 @@ cd client && npx eslint src --max-warnings 0
 
 ## Contact / context
 
-- Working dir: `/home/dave/lilypond-workspace`
+- Working dir: `/data/data/com.termux/files/home/lilypond-workspace`
 - Branch: `main`
-- Latest commits: `67bb328` (trigger fix), `570a8fd` (handoff); built on top of `6227de8`.
+- Latest commits: `aa2ed2e` (tokenizer/snippets/tree), `cf46daf` (rock-band-2 restructure), built on `c75b4da`.
 - This handoff is kept up to date as items ship.
