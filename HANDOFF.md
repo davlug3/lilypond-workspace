@@ -77,7 +77,7 @@ client/dist                      Build output served by Express
     the single backslash typed by the user.
   - Fix: `triggerCharacters: ["\\"]` (one backslash at runtime).
   - Status: applied locally, `tsc --noEmit` passes, `npm run build` passes.
-  - **Not yet committed** — todo before next release.
+  - **Committed** in `67bb328` on top of the handoff commit `570a8fd`.
 
 ## Next move (agreed)
 
@@ -154,7 +154,7 @@ read-only (`dr-xr-xr-x`); `chmod -R u+w` is required before editing.
 - [ ] Implement the `sections/{intro,verse,chorus}` split (files above).
 - [ ] Create `full-band.ly` stitching includes + combined variables + score block.
 - [ ] Remove old `08/09/10-*.ly` and old instrument directories.
-- [ ] Commit `client/src/lib/lilypondLanguage.ts` trigger fix.
+- [x] Commit `client/src/lib/lilypondLanguage.ts` trigger fix (`67bb328`).
 - [ ] Compile `full-band.ly` locally to verify LilyPond syntax (if `lilypond`
       is installed) before declaring done.
 
@@ -206,5 +206,5 @@ cd client && npx eslint src --max-warnings 0
 
 - Working dir: `/home/dave/lilypond-workspace`
 - Branch: `main`
-- Last pushed commit: `6227de8`
-- This handoff committed on top of that.
+- Latest commits: `67bb328` (trigger fix), `570a8fd` (handoff); built on top of `6227de8`.
+- This handoff is kept up to date as items ship.
