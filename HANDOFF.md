@@ -216,6 +216,11 @@ cd client && npx eslint src --max-warnings 0
   token, delete section all `lilypond`-compile ✓; add+delete round-trips to a
   wrapper identical apart from stitch-def ordering (token order); validation
   (reserved token, bad name, last-section guard) returns proper errors ✓.
+  Audit follow-up (uncommitted fixes now in): legacy PianoStaff delete
+  corrupted the score (brace-matching from nested braceless Staff lines) —
+  now restricted to top-level 4-space blocks; new-token names colliding on
+  variable prefix (e.g. `lead` vs `vocals`) are rejected; score insertion
+  point is validated before any files are written.
   Note: `workspace/<project>` copies are snapshots — preset updates don't
   propagate; delete the workspace copy and re-Use the preset to refresh.
 

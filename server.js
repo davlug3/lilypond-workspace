@@ -643,6 +643,9 @@ function bandBlockEnd(lines, startIdx) {
 
 // Remove score Staff/Lyrics material for a deleted token: the managed block
 // when present, else legacy blocks referencing the token's <x>Full variables.
+// Only top-level score children (4-space indent) count as block starts —
+// nested `\new Staff = "upper"` lines inside PianoStaff are braceless and
+// must never be treated as blocks (brace-matching from them eats the file).
 function bandRemoveTokenFromScore(lines, token) {
   const vars = bandStitchDefs(token).map((d) => d.full);
   if (token === "drums") vars.push("drumGlobal");
@@ -653,12 +656,13 @@ function bandRemoveTokenFromScore(lines, token) {
     lines.splice(tagIdx, bandBlockEnd(lines, s) - tagIdx + 1);
     return;
   }
+  const isTopStaff = (l) => /^    \\new\s+(Staff|TabStaff|DrumStaff|PianoStaff)(\s|\\|$)/.test(l) && !/\\new\s+Staff\s*=/.test(l);
   const mentions = (txt) => vars.some((v) => txt.includes(`\\${v}`)) || (token === "vocals" && txt.includes('= "lead"'));
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (/\\new\s+(Staff|TabStaff|DrumStaff|PianoStaff)\b/.test(lines[i])) {
+    if (isTopStaff(lines[i])) {
       const e = bandBlockEnd(lines, i);
       if (mentions(lines.slice(i, e + 1).join("\n"))) lines.splice(i, e - i + 1);
-    } else if (/\\new\s+Lyrics\b/.test(lines[i])) {
+    } else if (/^    \\new\s+Lyrics\b/.test(lines[i])) {
       if (vars.some((v) => lines[i].includes(`\\${v}`))) lines.splice(i, 1);
     }
   }
@@ -729,7 +733,22 @@ app.post("/api/band/token", async (req, res) => {
   const info = await bandStructure(bp.name);
   if (!info) return res.status(404).json({ error: "not a band project" });
   if (info.tokens.includes(token)) return res.status(409).json({ error: `instrument "${token}" already exists` });
+  const clash = info.tokens.find((t) => t !== token && bandPrefixFor(t) === bandPrefixFor(token));
+  if (clash) return res.status(409).json({ error: `"${token}" would define the same variables as "${clash}"; pick another name` });
   try {
+    // Locate the score insertion point BEFORE writing anything, so a failure
+    // here can't leave orphaned token files behind.
+    const raw0 = await fs.readFile(bp.wrapper, "utf8");
+    const probe = raw0.split("\n");
+    let at0 = probe.findIndex((l) => l.includes("\\new DrumStaff"));
+    if (at0 === -1) {
+      const layoutIdx = probe.findIndex((l) => /^\s*\\layout\b/.test(l));
+      at0 = -1;
+      for (let i = layoutIdx === -1 ? probe.length - 1 : layoutIdx; i >= 0; i--) {
+        if (/^\s*>>\s*$/.test(probe[i])) { at0 = i; break; }
+      }
+      if (at0 === -1) return res.status(500).json({ error: "could not locate score insertion point" });
+    }
     for (const s of info.sections) {
       const dest = path.join(bp.sectionsDir, s.name, `${token}.ily`);
       try { await fs.stat(dest); continue; } catch (_) {}
@@ -746,6 +765,7 @@ app.post("/api/band/token", async (req, res) => {
       await fs.writeFile(dest, placeholder ? bandIntroPlaceholder(token, s.name) : bandScaffold(token, s.name), "utf8");
     }
     // Add the Staff block before DrumStaff, else before the score's closing >>.
+    // (Insertion point was validated above, before any files were written.)
     const raw = await fs.readFile(bp.wrapper, "utf8");
     const lines = raw.split("\n");
     const block = bandStaffBlock(token, req.body?.label || lilyCap(token), req.body?.midi, req.body?.clef, `${bandPrefixFor(token)}Full`);
@@ -756,8 +776,8 @@ app.post("/api/band/token", async (req, res) => {
       for (let i = layoutIdx === -1 ? lines.length - 1 : layoutIdx; i >= 0; i--) {
         if (/^\s*>>\s*$/.test(lines[i])) { at = i; break; }
       }
-      if (at === -1) return res.status(500).json({ error: "could not locate score insertion point" });
     }
+    if (at === -1) at = at0; // wrapper unchanged since probe; identical content
     lines.splice(at, 0, ...block);
     await fs.writeFile(bp.wrapper, lines.join("\n"), "utf8");
     await rewriteBandWrapper(bp.name, null, [...info.tokens, token]);
