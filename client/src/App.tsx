@@ -48,6 +48,12 @@ export default function App() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [midiUrl, setMidiUrl] = useState<string | null>(null)
   const [presets, setPresets] = useState<{ name: string; files: string[] }[]>([])
+  const [band, setBand] = useState<any>(null)
+  const [newSection, setNewSection] = useState('')
+  const [newToken, setNewToken] = useState('')
+  const [newLabel, setNewLabel] = useState('')
+  const [newMidi, setNewMidi] = useState('')
+  const [newClef, setNewClef] = useState('treble')
   const [scaffoldKind, setScaffoldKind] = useState<'part' | 'staff' | 'instrument' | 'voice' | 'polyphony'>('part')
   const { theme, setTheme } = useTheme()
   const monacoTheme = theme === 'dark' ? 'lilypond-dark' : theme === 'light' ? 'lilypond-light' : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'lilypond-dark' : 'lilypond-light')
@@ -70,7 +76,11 @@ export default function App() {
 
   const api = async (url: string, init?: RequestInit) => {
     const r = await fetch(url, init)
-    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`)
+    if (!r.ok) {
+      let msg = `${r.status} ${r.statusText}`
+      try { const j = await r.json(); if (j.error) msg = j.error } catch { /* keep status text */ }
+      throw new Error(msg)
+    }
     return r.json()
   }
 
@@ -315,6 +325,68 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
     }
   }
 
+  const bandProjectOf = (name: string) => name.includes('/') ? name.split('/')[0] : null
+
+  const loadBand = async (project: string | null) => {
+    if (!project) { setBand(null); return }
+    try {
+      const j = await api(`/api/band?project=${encodeURIComponent(project)}`)
+      setBand(j.sections ? j : null)
+    } catch { setBand(null) }
+  }
+
+  // Refresh the band panel whenever the open file or tree changes.
+  useEffect(() => { loadBand(bandProjectOf(selected)) }, [selected, tree])
+
+  const bandMutate = async (url: string, init: RequestInit, what: string) => {
+    try {
+      const j = await api(url, init)
+      setBand(j.structure ?? null)
+      await refreshFiles()
+      setStatus({ state: 'ok', text: what })
+    } catch (e) {
+      setLog(`${what} failed: ${(e as Error).message}`)
+    }
+  }
+
+  const onAddSection = () => {
+    const proj = bandProjectOf(selected)
+    const name = newSection.trim()
+    if (!proj || !name) return
+    bandMutate('/api/band/section', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: proj, section: name }),
+    }, `section added: ${name}`).then(() => setNewSection(''))
+  }
+
+  const onDelSection = (s: string) => {
+    const proj = bandProjectOf(selected)
+    if (!proj) return
+    if (!window.confirm(`Delete section "${s}" from ${proj}? Its files are removed and full-band.ly is restitched.`)) return
+    bandMutate(`/api/band/section?project=${encodeURIComponent(proj)}&section=${encodeURIComponent(s)}`, { method: 'DELETE' }, `section deleted: ${s}`)
+    if (selected.startsWith(`${proj}/sections/${s}/`)) loadFile(`${proj}/full-band.ly`)
+  }
+
+  const onAddToken = () => {
+    const proj = bandProjectOf(selected)
+    const name = newToken.trim()
+    if (!proj || !name) return
+    bandMutate('/api/band/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: proj, token: name, label: newLabel.trim(), midi: newMidi.trim(), clef: newClef }),
+    }, `instrument added: ${name}`).then(() => { setNewToken(''); setNewLabel(''); setNewMidi('') })
+  }
+
+  const onDelToken = (t: string) => {
+    const proj = bandProjectOf(selected)
+    if (!proj) return
+    if (!window.confirm(`Delete instrument "${t}" from ${proj}? Its files, stitches, and score staff are removed.`)) return
+    bandMutate(`/api/band/token?project=${encodeURIComponent(proj)}&token=${encodeURIComponent(t)}`, { method: 'DELETE' }, `instrument deleted: ${t}`)
+    if (selected.startsWith(`${proj}/sections/`) && selected.endsWith(`/${t}.ily`)) loadFile(`${proj}/full-band.ly`)
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b px-3 py-2 flex flex-wrap items-center justify-between gap-2">
@@ -381,6 +453,53 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
               </section>
             </div>
           </details>
+
+          {band && (
+            <details id="bandPanel" className="border rounded mb-2">
+              <summary className="p-2 font-semibold cursor-pointer">Sections &amp; instruments <span className="text-xs font-normal text-muted-foreground">({band.project})</span></summary>
+              <div className="p-3 border-t space-y-3 text-sm">
+                <div>
+                  <h3 className="text-xs uppercase text-muted-foreground mb-1">Sections</h3>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {band.sections.map((s: any) => (
+                      <span key={s.name} className="inline-flex items-center gap-1 border rounded px-2 py-0.5">
+                        {s.name}
+                        <button type="button" aria-label={`Delete section ${s.name}`} title={`Delete section ${s.name}`} disabled={band.sections.length <= 1} className="text-destructive hover:underline disabled:opacity-30" onClick={() => onDelSection(s.name)}>✕</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-1">
+                    <input id="newSection" className="border rounded px-2 py-1 text-sm flex-1 min-w-0" placeholder="new section (e.g. bridge)" value={newSection} onChange={(e) => setNewSection(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') onAddSection() }} />
+                    <Button size="sm" variant="outline" onClick={onAddSection}>+ Section</Button>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-xs uppercase text-muted-foreground mb-1">Instruments</h3>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {band.tokens.map((t: string) => (
+                      <span key={t} className="inline-flex items-center gap-1 border rounded px-2 py-0.5">
+                        {t}
+                        <button type="button" aria-label={`Delete instrument ${t}`} title={`Delete instrument ${t}`} className="text-destructive hover:underline" onClick={() => onDelToken(t)}>✕</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    <input id="newToken" className="border rounded px-2 py-1 text-sm flex-1 min-w-24" placeholder="name (e.g. horns)" value={newToken} onChange={(e) => setNewToken(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') onAddToken() }} />
+                    <input id="newTokenLabel" className="border rounded px-2 py-1 text-sm flex-1 min-w-24" placeholder="label (optional)" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} />
+                    <input id="newTokenMidi" className="border rounded px-2 py-1 text-sm flex-1 min-w-24" placeholder="midi (optional)" value={newMidi} onChange={(e) => setNewMidi(e.target.value)} />
+                    <select id="newTokenClef" className="border rounded px-1 py-1 text-sm" value={newClef} onChange={(e) => setNewClef(e.target.value)}>
+                      <option value="treble">treble</option>
+                      <option value="treble_8">treble_8</option>
+                      <option value="bass">bass</option>
+                      <option value="alto">alto</option>
+                      <option value="tenor">tenor</option>
+                    </select>
+                    <Button size="sm" variant="outline" onClick={onAddToken}>+ Instrument</Button>
+                  </div>
+                </div>
+              </div>
+            </details>
+          )}
 
           <div className="w-full h-[45vh] lg:h-96 border rounded overflow-hidden">
             <Editor

@@ -400,6 +400,396 @@ app.delete("/api/tree-entry", async (req, res) => {
   }
 });
 
+// ---- Band projects: sections/<section>/<token>.ily + full-band.ly stitch ----
+// A band project is a workspace entry with sections/<section>/*.ily token
+// files and a full-band.ly wrapper that \includes them and stitches
+// <x>Full variables. The wrapper's include order is the section/token order
+// source of truth; rewrites preserve it and append new entries at the end.
+
+function validBandWord(raw) {
+  const s = String(raw || "").trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]{0,23}$/.test(s)) return null;
+  if (s === "shared" || s === "sections") return null;
+  return s;
+}
+
+function bandPaths(project) {
+  const norm = path.normalize(String(project || ""));
+  if (!norm || norm === "." || norm.startsWith("..") || path.isAbsolute(norm) || norm.includes(path.sep)) return null;
+  const root = path.join(WORKSPACE_DIR, norm);
+  if (root !== WORKSPACE_DIR && !root.startsWith(WORKSPACE_DIR + path.sep)) return null;
+  return { name: norm, root, wrapper: path.join(root, "full-band.ly"), sectionsDir: path.join(root, "sections") };
+}
+
+function lilyCap(s) {
+  const t = String(s || "").replace(/[^A-Za-z0-9]/g, "");
+  return t ? t[0].toUpperCase() + t.slice(1) : "";
+}
+
+// Canonical variable prefix per token file. New (custom) tokens use their own
+// name as prefix, so horns.ily defines hornsVerse/hornsChorus/hornsFull.
+const BAND_TOKEN_PREFIX = { guitar: "guitar", keys: "piano", drums: "drum", bass: "bass", vocals: "lead", backing: "backing", rhythm: "rhythm" };
+function bandPrefixFor(token) { return BAND_TOKEN_PREFIX[token] || token; }
+
+// Stitch definitions per token: [{ full, words, ref(sectionCap) }].
+function bandStitchDefs(token) {
+  if (token === "keys") return [
+    { full: "pianoFullRH", ref: (c) => `piano${c}RH` },
+    { full: "pianoFullLH", ref: (c) => `piano${c}LH` },
+  ];
+  if (token === "drums") return [
+    { full: "drumFullHands", ref: (c) => `drum${c}Hands` },
+    { full: "drumFullFeet", ref: (c) => `drum${c}Feet` },
+  ];
+  if (token === "vocals") return [
+    { full: "leadFull", ref: (c) => `lead${c}` },
+    { full: "leadWordsFull", words: true, ref: (c) => `leadWords${c}` },
+  ];
+  if (token === "backing") return [
+    { full: "backingFull", ref: (c) => `backing${c}` },
+    { full: "backingWordsFull", words: true, ref: (c) => `backingWords${c}` },
+  ];
+  const p = bandPrefixFor(token);
+  return [{ full: `${p}Full`, ref: (c) => `${p}${c}` }];
+}
+
+async function bandStructure(project) {
+  const bp = bandPaths(project);
+  if (!bp) return null;
+  let entries;
+  try { entries = await fs.readdir(bp.sectionsDir, { withFileTypes: true }); } catch (_) { return null; }
+  try { await fs.stat(bp.wrapper); } catch (_) { return null; }
+  const sections = [];
+  for (const e of entries) {
+    if (!e.isDirectory() || e.name.startsWith(".")) continue;
+    let files;
+    try { files = await fs.readdir(path.join(bp.sectionsDir, e.name)); } catch (_) { continue; }
+    sections.push({ name: e.name, tokens: files.filter((f) => f.endsWith(".ily")).map((f) => f.slice(0, -4)).sort() });
+  }
+  // Order from the wrapper's include lines; unknown dirs/files append alphabetically.
+  let secOrder = [], tokOrder = [];
+  try {
+    const w = await fs.readFile(bp.wrapper, "utf8");
+    for (const m of w.matchAll(/\\include\s+"sections\/([^"/]+)\/([^"/]+)\.ily"/g)) {
+      if (!secOrder.includes(m[1])) secOrder.push(m[1]);
+      if (!tokOrder.includes(m[2])) tokOrder.push(m[2]);
+    }
+  } catch (_) {}
+  sections.sort((a, b) =>
+    (secOrder.indexOf(a.name) === -1 ? 1e9 : secOrder.indexOf(a.name)) -
+    (secOrder.indexOf(b.name) === -1 ? 1e9 : secOrder.indexOf(b.name)) ||
+    a.name.localeCompare(b.name));
+  for (const s of sections) s.tokens.sort((a, b) =>
+    (tokOrder.indexOf(a) === -1 ? 1e9 : tokOrder.indexOf(a)) -
+    (tokOrder.indexOf(b) === -1 ? 1e9 : tokOrder.indexOf(b)) ||
+    a.localeCompare(b));
+  const tokens = [];
+  for (const t of tokOrder) if (sections.some((s) => s.tokens.includes(t)) && !tokens.includes(t)) tokens.push(t);
+  for (const s of sections) for (const t of s.tokens) if (!tokens.includes(t)) tokens.push(t);
+  return { project: bp.name, wrapper: `${bp.name}/full-band.ly`, sections, tokens };
+}
+
+// Placeholder music for a new <token> in <section>: 4 bars of rests
+// (pitched whole-notes for sung tokens so lyrics attach). Mirrors each
+// family's conventions (\global, clefs, \voiceOne/Two, lyrics).
+function bandScaffold(token, section) {
+  const C = lilyCap(section);
+  const head = `% ${section} — ${token} token. Scaffold placeholder: replace with real music.`;
+  if (token === "keys") return `${head}\npiano${C}RH = \\relative c' {\n  \\global\n  R1 | R1 | R1 | R1 |\n}\n\npiano${C}LH = \\relative c {\n  \\global\n  \\clef bass\n  R1 | R1 | R1 | R1 |\n}\n`;
+  if (token === "drums") return `${head}\ndrum${C}Hands = \\drummode {\n  \\voiceOne\n  R1 | R1 | R1 | R1 |\n}\n\ndrum${C}Feet = \\drummode {\n  \\voiceTwo\n  R1 | R1 | R1 | R1 |\n}\n`;
+  if (token === "vocals") return `${head}\nlead${C} = \\relative c' {\n  \\global\n  e1 | e1 | e1 | e1 |\n}\n\nleadWords${C} = \\lyricmode {\n  la __ la __ la __ la __\n}\n`;
+  if (token === "backing") return `${head}\nbacking${C} = \\relative c' {\n  \\global\n  e1 | e1 | e1 | e1 |\n}\n\nbackingWords${C} = \\lyricmode {\n  ooh __ ooh __ ooh __ ooh __\n}\n`;
+  if (token === "bass") return `${head}\nbass${C} = \\relative c {\n  \\global\n  \\clef bass\n  R1 | R1 | R1 | R1 |\n}\n`;
+  const p = bandPrefixFor(token);
+  return `${head}\n${p}${C} = \\relative c' {\n  \\global\n  R1 | R1 | R1 | R1 |\n}\n`;
+}
+
+function bandIntroPlaceholder(token, section) {
+  return `% ${section} — ${token} token. Scaffold placeholder.\n% Replace with real ${section} material; once its variables are defined,\n% full-band.ly stitches them in automatically.\n`;
+}
+
+// Regenerate full-band.ly includes + <x>Full stitches + lead voice from disk.
+// - include order: existing wrapper order, new sections/tokens appended
+// - stitch refs: only variables actually defined in the section token file
+//   (comment-only placeholders contribute nothing)
+// - lead voice: section-ordered (A/B split when defined, else single var)
+async function rewriteBandWrapper(project, secOrder, tokOrder) {
+  const bp = bandPaths(project);
+  const text = await fs.readFile(bp.wrapper, "utf8");
+  const info = await bandStructure(project);
+  if (!info) throw new Error("not a band project");
+  const secs = info.sections.map((s) => s.name);
+  if (secOrder) {
+    const known = new Set(secs);
+    secs.length = 0;
+    for (const s of secOrder) if (known.has(s)) secs.push(s);
+    for (const s of info.sections.map((x) => x.name)) if (!secs.includes(s)) secs.push(s);
+  }
+  const toks = info.tokens.slice();
+  if (tokOrder) {
+    const known = new Set(toks);
+    toks.length = 0;
+    for (const t of tokOrder) if (known.has(t)) toks.push(t);
+    for (const t of info.tokens) if (!toks.includes(t)) toks.push(t);
+  }
+  const bodies = {};
+  for (const s of secs) for (const t of toks) {
+    try { bodies[`${s}/${t}`] = await fs.readFile(path.join(bp.sectionsDir, s, `${t}.ily`), "utf8"); }
+    catch (_) { bodies[`${s}/${t}`] = null; }
+  }
+  const defines = (sec, tok, v) => {
+    const b = bodies[`${sec}/${tok}`];
+    return !!b && new RegExp(`(^|\\n)\\s*${v}\\s*=`).test(b);
+  };
+
+  const lines = text.split("\n");
+  // 1) include block: first shared include .. last sections include
+  const isSharedInc = (l) => /\\include\s+"shared\/shared\.ily"/.test(l);
+  const isSecInc = (l) => /\\include\s+"sections\/[^"]+\.ily"/.test(l);
+  const iStart = lines.findIndex(isSharedInc);
+  let iEnd = -1;
+  lines.forEach((l, i) => { if (isSecInc(l)) iEnd = i; });
+  const incBlock = [];
+  try { await fs.stat(path.join(bp.root, "shared", "shared.ily")); incBlock.push(`\\include "shared/shared.ily"`); } catch (_) {}
+  for (const s of secs) for (const t of toks) {
+    if (bodies[`${s}/${t}`] !== null) incBlock.push(`\\include "sections/${s}/${t}.ily"`);
+  }
+  if (iStart !== -1 && iEnd !== -1 && iEnd >= iStart) lines.splice(iStart, iEnd - iStart + 1, ...incBlock);
+  else {
+    const vIdx = lines.findIndex((l) => l.startsWith("\\version"));
+    lines.splice(vIdx === -1 ? 0 : vIdx + 1, 0, ...incBlock);
+  }
+
+  // 2) stitch block: consecutive top-level "<var> = {" / "<var> = \lyricmode"
+  // lines (covers guitarFull, pianoFullRH/LH, drumFullHands/Feet, *WordsFull)
+  const isStitch = (l) => /^\s*[A-Za-z]\w*\s*=\s*(\{|\\lyricmode)/.test(l);
+  const sStart0 = lines.findIndex(isStitch);
+  let sStart = sStart0, sEnd = sStart0;
+  if (sStart !== -1) {
+    while (sEnd + 1 < lines.length && isStitch(lines[sEnd + 1])) sEnd++;
+    // Swallow our own "% Stitched variables" header(s) so rewrites replace
+    // the whole region instead of stacking a new header each time.
+    while (sStart - 1 >= 0 && /^%\s*Stitched variables/.test(lines[sStart - 1])) sStart--;
+  }
+  const contributing = secs.filter((s) => toks.some((t) => bandStitchDefs(t).some((d) => defines(s, t, d.ref(lilyCap(s))))));
+  const stitchBlock = [`% Stitched variables: full-band view = ${(contributing.length ? contributing : secs).join(" + ")}.`];
+  for (const t of toks) {
+    for (const d of bandStitchDefs(t)) {
+      const refs = secs.filter((s) => defines(s, t, d.ref(lilyCap(s)))).map((s) => `\\${d.ref(lilyCap(s))}`);
+      stitchBlock.push(d.words
+        ? `${d.full} = \\lyricmode {${refs.length ? ` ${refs.join(" ")} ` : " "}}`
+        : `${d.full} = {${refs.length ? ` ${refs.join(" ")} ` : ""}}`);
+    }
+  }
+  if (sStart !== -1) lines.splice(sStart, sEnd - sStart + 1, ...stitchBlock);
+  else {
+    const anchor = lines.findIndex((l) => l.startsWith("#(set-global-staff-size") || l.startsWith("\\header"));
+    lines.splice(anchor === -1 ? lines.length : anchor, 0, ...stitchBlock, "");
+  }
+
+  // 3) lead voice (only while the vocals token exists)
+  if (toks.includes("vocals")) {
+    const entries = [];
+    for (const s of secs) {
+      const C = lilyCap(s);
+      const hasA = defines(s, "vocals", `lead${C}A`), hasB = defines(s, "vocals", `lead${C}B`);
+      if (hasA || hasB) { if (hasA) entries.push(`\\lead${C}A`); if (hasB) entries.push(`\\lead${C}B`); }
+      else if (defines(s, "vocals", `lead${C}`)) entries.push(`\\lead${C}`);
+    }
+    const body = entries.length
+      ? entries.map((e, i) => `        ${e}${i < entries.length - 1 ? " \\break" : ""}`).join("\n")
+      : "        R1";
+    const joined = lines.join("\n").replace(
+      /\\new Voice = "lead" \{[\s\S]*?\n(\s*)\}/,
+      (_m, indent) => `\\new Voice = "lead" {\n${body}\n${indent}}`
+    );
+    lines.length = 0;
+    lines.push(...joined.split("\n"));
+  }
+
+  await fs.writeFile(bp.wrapper, lines.join("\n"), "utf8");
+}
+
+// Score Staff block for a newly added (custom) token, tagged for later removal.
+function bandStaffBlock(token, label, midi, clef, fullVar) {
+  const safeLabel = String(label || token).replace(/["\\\n\r]/g, "").slice(0, 40) || token;
+  const safeMidi = String(midi || "acoustic grand").replace(/["\\\n\r]/g, "").slice(0, 60) || "acoustic grand";
+  const safeClef = ["treble", "bass", "alto", "tenor", "treble_8"].includes(clef) ? clef : "treble";
+  return [
+    `    % token:${token} (managed)`,
+    `    \\new Staff \\with {`,
+    `      instrumentName = "${safeLabel}"`,
+    `      midiInstrument = "${safeMidi}"`,
+    `    } {`,
+    `      \\clef "${safeClef}"`,
+    `      \\${fullVar}`,
+    `    }`,
+  ];
+}
+
+// End line (inclusive) of the Staff-like block starting at lines[startIdx].
+// Counts { } and << >> so PianoStaff (<< >>) blocks resolve correctly.
+function bandBlockEnd(lines, startIdx) {
+  let depth = 0, seen = false;
+  for (let i = startIdx; i < lines.length; i++) {
+    const l = lines[i];
+    depth += (l.match(/<</g) || []).length + (l.match(/\{/g) || []).length
+      - (l.match(/>>/g) || []).length - (l.match(/\}/g) || []).length;
+    if (depth > 0) seen = true;
+    if (seen && depth <= 0) return i;
+  }
+  return startIdx;
+}
+
+// Remove score Staff/Lyrics material for a deleted token: the managed block
+// when present, else legacy blocks referencing the token's <x>Full variables.
+function bandRemoveTokenFromScore(lines, token) {
+  const vars = bandStitchDefs(token).map((d) => d.full);
+  if (token === "drums") vars.push("drumGlobal");
+  const tagIdx = lines.findIndex((l) => l.trim() === `% token:${token} (managed)`);
+  if (tagIdx !== -1) {
+    let s = tagIdx + 1;
+    while (s < lines.length && !lines[s].trim()) s++;
+    lines.splice(tagIdx, bandBlockEnd(lines, s) - tagIdx + 1);
+    return;
+  }
+  const mentions = (txt) => vars.some((v) => txt.includes(`\\${v}`)) || (token === "vocals" && txt.includes('= "lead"'));
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (/\\new\s+(Staff|TabStaff|DrumStaff|PianoStaff)\b/.test(lines[i])) {
+      const e = bandBlockEnd(lines, i);
+      if (mentions(lines.slice(i, e + 1).join("\n"))) lines.splice(i, e - i + 1);
+    } else if (/\\new\s+Lyrics\b/.test(lines[i])) {
+      if (vars.some((v) => lines[i].includes(`\\${v}`))) lines.splice(i, 1);
+    }
+  }
+}
+
+app.get("/api/band", async (req, res) => {
+  const info = await bandStructure(req.query.project);
+  if (!info) return res.status(404).json({ error: "not a band project (need sections/ + full-band.ly)" });
+  res.json(info);
+});
+
+app.post("/api/band/section", async (req, res) => {
+  const bp = bandPaths(req.body?.project);
+  const section = validBandWord(req.body?.section);
+  if (!bp || !section) return res.status(400).json({ error: "need { project, section } (letters/digits/hyphens)" });
+  const info = await bandStructure(bp.name);
+  if (!info) return res.status(404).json({ error: "not a band project" });
+  if (info.sections.some((s) => s.name === section)) return res.status(409).json({ error: `section "${section}" already exists` });
+  try {
+    await fs.mkdir(path.join(bp.sectionsDir, section), { recursive: true });
+    for (const t of info.tokens) {
+      const dest = path.join(bp.sectionsDir, section, `${t}.ily`);
+      try { await fs.stat(dest); continue; } catch (_) {}
+      await fs.writeFile(dest, bandScaffold(t, section), "utf8");
+    }
+    // Order: insert after `after` when it names an existing section, else append.
+    const order = info.sections.map((s) => s.name);
+    const after = String(req.body?.after || "");
+    const at = order.indexOf(after);
+    if (at !== -1) order.splice(at + 1, 0, section);
+    else order.push(section);
+    await rewriteBandWrapper(bp.name, order, null);
+    res.json({ ok: true, section, structure: await bandStructure(bp.name) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete("/api/band/section", async (req, res) => {
+  const bp = bandPaths(req.query.project ?? req.body?.project);
+  const section = validBandWord(req.query.section ?? req.body?.section);
+  if (!bp || !section) return res.status(400).json({ error: "need ?project=&section=" });
+  const info = await bandStructure(bp.name);
+  if (!info) return res.status(404).json({ error: "not a band project" });
+  if (!info.sections.some((s) => s.name === section)) return res.status(404).json({ error: `no such section "${section}"` });
+  if (info.sections.length <= 1) return res.status(400).json({ error: "cannot delete the last section" });
+  try {
+    const full = path.join(bp.sectionsDir, section);
+    if (full !== bp.sectionsDir && full.startsWith(bp.sectionsDir + path.sep)) {
+      await fs.rm(full, { recursive: true, force: true });
+    }
+    await rewriteBandWrapper(bp.name, null, null);
+    res.json({ ok: true, section, structure: await bandStructure(bp.name) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Custom instruments only: legacy tokens (guitar/keys/drums/bass/vocals/
+// backing/rhythm) are structural — restore them from the preset instead.
+const BAND_RESERVED_TOKENS = new Set(["guitar", "keys", "drums", "bass", "vocals", "backing", "rhythm"]);
+
+app.post("/api/band/token", async (req, res) => {
+  const bp = bandPaths(req.body?.project);
+  const token = validBandWord(req.body?.token);
+  if (!bp || !token) return res.status(400).json({ error: "need { project, token } (letters/digits/hyphens)" });
+  if (BAND_RESERVED_TOKENS.has(token)) return res.status(409).json({ error: `"${token}" is a built-in instrument; restore it from the preset instead` });
+  const info = await bandStructure(bp.name);
+  if (!info) return res.status(404).json({ error: "not a band project" });
+  if (info.tokens.includes(token)) return res.status(409).json({ error: `instrument "${token}" already exists` });
+  try {
+    for (const s of info.sections) {
+      const dest = path.join(bp.sectionsDir, s.name, `${token}.ily`);
+      try { await fs.stat(dest); continue; } catch (_) {}
+      // Sections with no defined variables at all stay comment-only placeholders.
+      let placeholder = true;
+      try {
+        const existing = await fs.readdir(path.join(bp.sectionsDir, s.name));
+        for (const f of existing) {
+          if (!f.endsWith(".ily")) continue;
+          const body = await fs.readFile(path.join(bp.sectionsDir, s.name, f), "utf8");
+          if (/(^|\n)\s*[A-Za-z]+\s*=/.test(body)) { placeholder = false; break; }
+        }
+      } catch (_) {}
+      await fs.writeFile(dest, placeholder ? bandIntroPlaceholder(token, s.name) : bandScaffold(token, s.name), "utf8");
+    }
+    // Add the Staff block before DrumStaff, else before the score's closing >>.
+    const raw = await fs.readFile(bp.wrapper, "utf8");
+    const lines = raw.split("\n");
+    const block = bandStaffBlock(token, req.body?.label || lilyCap(token), req.body?.midi, req.body?.clef, `${bandPrefixFor(token)}Full`);
+    let at = lines.findIndex((l) => l.includes("\\new DrumStaff"));
+    if (at === -1) {
+      const layoutIdx = lines.findIndex((l) => /^\s*\\layout\b/.test(l));
+      at = -1;
+      for (let i = layoutIdx === -1 ? lines.length - 1 : layoutIdx; i >= 0; i--) {
+        if (/^\s*>>\s*$/.test(lines[i])) { at = i; break; }
+      }
+      if (at === -1) return res.status(500).json({ error: "could not locate score insertion point" });
+    }
+    lines.splice(at, 0, ...block);
+    await fs.writeFile(bp.wrapper, lines.join("\n"), "utf8");
+    await rewriteBandWrapper(bp.name, null, [...info.tokens, token]);
+    res.json({ ok: true, token, structure: await bandStructure(bp.name) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete("/api/band/token", async (req, res) => {
+  const bp = bandPaths(req.query.project ?? req.body?.project);
+  const token = validBandWord(req.query.token ?? req.body?.token);
+  if (!bp || !token) return res.status(400).json({ error: "need ?project=&token=" });
+  const info = await bandStructure(bp.name);
+  if (!info) return res.status(404).json({ error: "not a band project" });
+  if (!info.tokens.includes(token)) return res.status(404).json({ error: `no such instrument "${token}"` });
+  try {
+    for (const s of info.sections) {
+      const full = path.join(bp.sectionsDir, s.name, `${token}.ily`);
+      if (full.startsWith(bp.sectionsDir + path.sep)) await fs.rm(full, { force: true });
+    }
+    const raw = await fs.readFile(bp.wrapper, "utf8");
+    const lines = raw.split("\n");
+    bandRemoveTokenFromScore(lines, token);
+    await fs.writeFile(bp.wrapper, lines.join("\n"), "utf8");
+    await rewriteBandWrapper(bp.name, null, null);
+    res.json({ ok: true, token, structure: await bandStructure(bp.name) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ---- Server-persisted SoundFonts (public/soundfonts/*) ----
 // List: GET /api/soundfonts -> { files: [{ name, url, size }] }
 // Upload: POST /api/soundfonts with Content-Type: application/octet-stream,

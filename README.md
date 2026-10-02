@@ -19,6 +19,16 @@ Requires `lilypond` on PATH (you have 2.22.2). Check: `lilypond --version`.
     `{ success, log, pngs[], pdf, midi, urls }` as data URLs, and mirrors the
     latest good output to `public/preview.png`, `public/preview.pdf`, `public/preview.midi`.
   - `GET /api/files`, `GET /api/file?name=x.ly`, `PUT /api/file?name=x.ly` — workspace file CRUD.
+  - Band projects (`presets/rock-band-2` layout: `sections/<section>/<token>.ily`
+    stitched by `full-band.ly`): `GET /api/band?project=name` (sections/tokens),
+    `POST /api/band/section { project, section, after? }`,
+    `DELETE /api/band/section?project=&section=`,
+    `POST /api/band/token { project, token, label?, midi?, clef? }` (custom
+    instruments only — built-ins are structural, restore them from the preset),
+    `DELETE /api/band/token?project=&token=`. Mutations scaffold placeholder
+    token files, restitch `full-band.ly` includes + `<x>Full` variables + lead
+    voice, and add/remove the score staff (custom staves are tagged
+    `% token:<name> (managed)`). Deleting the last section is refused.
   - `GET /api/version` — lilypond version string.
   - `GET /api/watch` — SSE stream; pushes `auto-compiled` events (with static
     `pngUrls`/`pdfUrl`/`midiUrl`, log, page count) whenever a workspace file is saved.

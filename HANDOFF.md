@@ -167,7 +167,10 @@ vocals-backing/` directories (content moved into `sections/`).
 - [x] Add snippet completions for common commands.
 - [x] Wire workspace tree → Monaco tab/file switch (recursive tree,
       click a node opens it in the editor, selected file highlighted).
-- [ ] Update `README.md` (project layout, rock-band-2 restructure).
+- [x] Add/delete sections + instruments for band projects (`/api/band/*`
+      endpoints + "Sections & instruments" panel in `App.tsx`; restitches
+      `full-band.ly`, scaffolds placeholders, tags custom staves).
+- [x] Update `README.md` (project layout, rock-band-2 restructure, band API).
 
 ### Low priority
 - [ ] Drag-to-install SF2 onto the browser UI.
@@ -208,6 +211,13 @@ cd client && npx eslint src --max-warnings 0
   (Note: npm bin shims in `client/node_modules/.bin` don't execute on this
   Termux shell; run `node node_modules/typescript/bin/tsc -b` and
   `node node_modules/vite/bin/vite.js build` instead.)
+- Band add/delete (sections + instruments): exercised end-to-end on a scratch
+  workspace copy — add section, add token, delete managed token, delete legacy
+  token, delete section all `lilypond`-compile ✓; add+delete round-trips to a
+  wrapper identical apart from stitch-def ordering (token order); validation
+  (reserved token, bad name, last-section guard) returns proper errors ✓.
+  Note: `workspace/<project>` copies are snapshots — preset updates don't
+  propagate; delete the workspace copy and re-Use the preset to refresh.
 
 ## Contact / context
 
