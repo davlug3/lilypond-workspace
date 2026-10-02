@@ -309,7 +309,8 @@ async function workspaceTree() {
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) {
         const sub = await walk(path.join(dir, e.name), r);
-        if (sub && (sub.files.length || sub.dirs.length)) dirs.push(sub);
+        // Keep empty folders too: folder CRUD needs them visible.
+        if (sub) dirs.push(sub);
       } else if (e.isFile() && /\.(ly|ily)$/i.test(e.name)) {
         files.push({ name: e.name, path: r });
       }
@@ -418,6 +419,67 @@ app.delete("/api/tree-entry", async (req, res) => {
   try {
     await fs.rm(full, { recursive: true, force: true });
     res.json({ ok: true, name: norm });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ---- Generic workspace entries (folder CRUD backing) ----
+// Any-depth, files or folders; always contained in the workspace.
+function resolveEntry(raw) {
+  const norm = path.normalize(String(raw || ""));
+  if (!norm || norm === "." || norm.startsWith("..") || path.isAbsolute(norm)) return null;
+  const full = path.join(WORKSPACE_DIR, norm);
+  if (full !== WORKSPACE_DIR && !full.startsWith(WORKSPACE_DIR + path.sep)) return null;
+  return { full, rel: norm.split(path.sep).join("/") };
+}
+
+// Create a folder (parents included).
+app.post("/api/folder", async (req, res) => {
+  const target = resolveEntry(req.body?.path || req.query.path);
+  if (!target) return res.status(400).json({ error: "invalid path (workspace-relative)" });
+  try {
+    await fs.mkdir(target.full, { recursive: true });
+    res.json({ ok: true, path: target.rel });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Rename / move an entry within the workspace.
+app.post("/api/move", async (req, res) => {
+  const from = resolveEntry(req.body?.from);
+  const to = resolveEntry(req.body?.to);
+  if (!from || !to) return res.status(400).json({ error: "invalid from/to (workspace-relative)" });
+  if (from.rel === to.rel) return res.status(400).json({ error: "source and destination are the same" });
+  if (to.rel === from.rel || to.rel.startsWith(from.rel + "/")) {
+    return res.status(400).json({ error: "cannot move an entry into itself" });
+  }
+  try {
+    await fs.stat(from.full);
+  } catch (_) {
+    return res.status(404).json({ error: `not found: ${from.rel}` });
+  }
+  try {
+    await fs.lstat(to.full);
+    return res.status(409).json({ error: `already exists: ${to.rel}` });
+  } catch (_) { /* free */ }
+  try {
+    await fs.mkdir(path.dirname(to.full), { recursive: true });
+    await fs.rename(from.full, to.full);
+    res.json({ ok: true, from: from.rel, to: to.rel });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Delete an entry at any depth (files or folders, recursive).
+app.delete("/api/entry", async (req, res) => {
+  const target = resolveEntry(req.query.name || req.body?.name);
+  if (!target) return res.status(400).json({ error: "invalid name (workspace-relative)" });
+  try {
+    await fs.rm(target.full, { recursive: true, force: true });
+    res.json({ ok: true, name: target.rel });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

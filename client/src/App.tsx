@@ -11,19 +11,40 @@ declare global {
   }
 }
 
-function TreeFiles({ node, depth, selected, onOpen }: { node: any; depth: number; selected: string; onOpen: (p: string) => void }) {
+type EntryOps = {
+  newFile: (dir: string) => void
+  newDir: (dir: string) => void
+  rename: (path: string) => void
+  remove: (path: string, isDir: boolean) => void
+}
+
+function TreeFiles({ node, depth, selected, onOpen, ops }: { node: any; depth: number; selected: string; onOpen: (p: string) => void; ops: EntryOps }) {
   return (
     <>
       {node.dirs.map((d: any) => (
         <details key={d.path} open={depth < 1}>
-          <summary className="cursor-pointer font-medium hover:underline">{d.name}/</summary>
+          <summary className="cursor-pointer font-medium hover:underline">
+            <span className="inline-flex items-center gap-1 flex-wrap">
+              <span>{d.name}/</span>
+              <span className="inline-flex gap-1 text-xs font-normal" onClick={(e) => e.preventDefault()}>
+                <button type="button" title={`New score in ${d.path}`} aria-label={`New score in ${d.path}`} className="hover:underline" onClick={() => ops.newFile(d.path)}>+f</button>
+                <button type="button" title={`New subfolder in ${d.path}`} aria-label={`New subfolder in ${d.path}`} className="hover:underline" onClick={() => ops.newDir(d.path)}>+d</button>
+                <button type="button" title={`Rename ${d.path}`} aria-label={`Rename ${d.path}`} className="hover:underline" onClick={() => ops.rename(d.path)}>✎</button>
+                <button type="button" title={`Delete ${d.path}`} aria-label={`Delete ${d.path}`} className="text-destructive hover:underline" onClick={() => ops.remove(d.path, true)}>✕</button>
+              </span>
+            </span>
+          </summary>
           <div className="pl-4">
-            <TreeFiles node={d} depth={depth + 1} selected={selected} onOpen={onOpen} />
+            <TreeFiles node={d} depth={depth + 1} selected={selected} onOpen={onOpen} ops={ops} />
           </div>
         </details>
       ))}
       {node.files.map((f: any) => (
-        <button key={f.path} type="button" className={`block w-full text-left py-0.5 hover:underline cursor-pointer ${f.path === selected ? 'font-semibold text-primary' : ''}`} onClick={() => onOpen(f.path)}>{f.name}</button>
+        <span key={f.path} className="flex items-center gap-1">
+          <button type="button" className={`block w-full text-left py-0.5 hover:underline cursor-pointer ${f.path === selected ? 'font-semibold text-primary' : ''}`} onClick={() => onOpen(f.path)}>{f.name}</button>
+          <button type="button" title={`Rename ${f.path}`} aria-label={`Rename ${f.path}`} className="text-xs hover:underline shrink-0" onClick={() => ops.rename(f.path)}>✎</button>
+          <button type="button" title={`Delete ${f.path}`} aria-label={`Delete ${f.path}`} className="text-xs text-destructive hover:underline shrink-0" onClick={() => ops.remove(f.path, false)}>✕</button>
+        </span>
       ))}
     </>
   )
@@ -393,6 +414,84 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
 
   const bandProjectOf = (name: string) => name.includes('/') ? name.split('/')[0] : null
 
+  // ---- Workspace entry CRUD (per folder + file) ----
+  const onEntryNewFile = async (dir: string) => {
+    const name = prompt(`New score file in ${dir || 'workspace'} (e.g. song.ly):`, 'song.ly')
+    if (!name?.trim()) return
+    let base = name.trim()
+    if (!/\.(ly|ily)$/i.test(base)) base += '.ly'
+    const rel = dir ? `${dir}/${base}` : base
+    try {
+      await api(`/api/file?name=${encodeURIComponent(rel)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: '' }),
+      })
+      await refreshFiles(rel)
+      loadFile(rel)
+    } catch (e) {
+      setLog(`Create failed: ${(e as Error).message}`)
+    }
+  }
+
+  const onEntryNewDir = async (dir: string) => {
+    const name = prompt(`New folder in ${dir || 'workspace'}:`, 'sketches')
+    if (!name?.trim()) return
+    const rel = dir ? `${dir}/${name.trim()}` : name.trim()
+    try {
+      await api('/api/folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: rel }),
+      })
+      await refreshFiles()
+      setStatus({ state: 'ok', text: `folder: ${rel}` })
+    } catch (e) {
+      setLog(`Create failed: ${(e as Error).message}`)
+    }
+  }
+
+  const onEntryRename = async (p: string) => {
+    const base = p.split('/').pop() ?? p
+    const name = prompt(`Rename ${p} to:`, base)
+    if (!name?.trim() || name.trim() === base) return
+    const parent = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : ''
+    const to = parent ? `${parent}/${name.trim()}` : name.trim()
+    try {
+      await api('/api/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: p, to }),
+      })
+      // Keep the open file in sync when it (or its folder) was renamed.
+      if (selected === p) setSelected(to)
+      else if (selected.startsWith(p + '/')) setSelected(to + selected.slice(p.length))
+      await refreshFiles()
+      setStatus({ state: 'ok', text: `renamed: ${to}` })
+    } catch (e) {
+      setLog(`Rename failed: ${(e as Error).message}`)
+    }
+  }
+
+  const onEntryRemove = async (p: string, isDir: boolean) => {
+    if (!window.confirm(`Delete ${p}${isDir ? ' and everything inside it' : ''}? This cannot be undone.`)) return
+    try {
+      await api(`/api/entry?name=${encodeURIComponent(p)}`, { method: 'DELETE' })
+      if (selected === p || selected.startsWith(p + '/')) { setSelected(''); setCode('') }
+      await refreshFiles()
+      setStatus({ state: 'ok', text: `deleted: ${p}` })
+    } catch (e) {
+      setLog(`Delete failed: ${(e as Error).message}`)
+    }
+  }
+
+  const entryOps: EntryOps = {
+    newFile: onEntryNewFile,
+    newDir: onEntryNewDir,
+    rename: onEntryRename,
+    remove: onEntryRemove,
+  }
+
   const loadBand = async (project: string | null) => {
     if (!project) { setBand(null); return }
     try {
@@ -557,11 +656,17 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
                 </div>
               </section>
               <section className="p-3">
-                <h3 className="text-xs uppercase text-muted-foreground mb-2">Workspace</h3>
+                <h3 className="text-xs uppercase text-muted-foreground mb-2">
+                  Workspace
+                  <span className="normal-case">
+                    {' '}<button type="button" title="New score in workspace root" className="underline" onClick={() => onEntryNewFile('')}>+file</button>
+                    {' '}<button type="button" title="New folder in workspace root" className="underline" onClick={() => onEntryNewDir('')}>+folder</button>
+                  </span>
+                </h3>
                 <div id="workspaceTree" className="text-sm max-h-64 overflow-auto">
                   {tree && (tree.dirs.length > 0 || tree.files.length > 0) ? (
                     <ul className="space-y-0.5">
-                      <TreeFiles node={tree} depth={0} selected={selected} onOpen={loadFile} />
+                      <TreeFiles node={tree} depth={0} selected={selected} onOpen={loadFile} ops={entryOps} />
                     </ul>
                   ) : (
                     <p className="text-muted-foreground">Empty — pick a preset.</p>
