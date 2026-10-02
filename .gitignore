@@ -1,8 +1,6 @@
 node_modules/
 .cache/
-public/preview.*
-public/preview-*.png
-public/auto.*
+client/dist/
 public/soundfonts/*
 !public/soundfonts/.gitkeep
 *.log
