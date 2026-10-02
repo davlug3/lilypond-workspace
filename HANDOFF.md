@@ -221,6 +221,14 @@ cd client && npx eslint src --max-warnings 0
   now restricted to top-level 4-space blocks; new-token names colliding on
   variable prefix (e.g. `lead` vs `vocals`) are rejected; score insertion
   point is validated before any files are written.
+- Solo section render (`POST /api/band/render` + `renderBandSolo`): opening a
+  `sections/<section>/<token>.ily` compiles/plays just that section via a
+  synthesized wrapper (family-correct staff: PianoStaff/DrumStaff/Staff+Tab/
+  Staff+Lyrics/generic; verse+chorus-tested ×7 families, MIDI confirmed
+  section-sized vs full). Placeholders fail gracefully; other `.ily` keep
+  wrapper resolution. Audit fix: removals are now collected as spans and
+  spliced descending — block splices previously shifted Lyrics indices and
+  left vocal/backing Lyrics lines dangling.
   Note: `workspace/<project>` copies are snapshots — preset updates don't
   propagate; delete the workspace copy and re-Use the preset to refresh.
 

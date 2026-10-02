@@ -641,11 +641,45 @@ function bandBlockEnd(lines, startIdx) {
   return startIdx;
 }
 
+// Top-level \score children, independent of indentation: scan the score's
+// << ... >> region tracking bracket depth; \new ... lines at depth 0 are
+// top-level blocks (nested `\new Staff = "upper"` lines sit deeper and can
+// never match). A block start must open with { or << on its own line.
+function bandScoreTopBlocks(lines) {
+  const scoreIdx = lines.findIndex((l) => /^\s*\\score\s*\{/.test(l));
+  if (scoreIdx === -1) return { blocks: [], lyrics: [] };
+  let openIdx = -1;
+  for (let i = scoreIdx; i < lines.length; i++) {
+    if (lines[i].includes("<<")) { openIdx = i; break; }
+  }
+  if (openIdx === -1) return { blocks: [], lyrics: [] };
+  const depthOf = (l) => {
+    const opens = (l.match(/<</g) || []).length + (l.match(/\{/g) || []).length;
+    const closes = (l.match(/>>/g) || []).length + (l.match(/\}/g) || []).length;
+    return opens - closes;
+  };
+  const isTopStaff = (l) => /^\s*\\new\s+(Staff|TabStaff|DrumStaff|PianoStaff)(\s|\\|$)/.test(l)
+    && !/\\new\s+Staff\s*=/.test(l) && (l.includes("{") || l.includes("<<"));
+  const blocks = [], lyrics = [];
+  let depth = 0;
+  for (let i = openIdx + 1; i < lines.length; i++) {
+    const l = lines[i];
+    if (depth === 0) {
+      if (/^\s*>>/.test(l)) break; // score music list closed
+      if (isTopStaff(l)) blocks.push({ start: i, end: bandBlockEnd(lines, i) });
+      else if (/^\s*\\new\s+Lyrics\b/.test(l)) lyrics.push(i);
+    }
+    depth += depthOf(l);
+    if (depth < 0) break;
+  }
+  return { blocks, lyrics };
+}
+
 // Remove score Staff/Lyrics material for a deleted token: the managed block
-// when present, else legacy blocks referencing the token's <x>Full variables.
-// Only top-level score children (4-space indent) count as block starts —
-// nested `\new Staff = "upper"` lines inside PianoStaff are braceless and
-// must never be treated as blocks (brace-matching from them eats the file).
+// when present, else legacy top-level blocks referencing the token's
+// <x>Full variables. Never touches nested lines, so reformatted wrappers
+// can't be corrupted — at worst a block is left behind (a compile error,
+// not silent damage).
 function bandRemoveTokenFromScore(lines, token) {
   const vars = bandStitchDefs(token).map((d) => d.full);
   if (token === "drums") vars.push("drumGlobal");
@@ -656,17 +690,133 @@ function bandRemoveTokenFromScore(lines, token) {
     lines.splice(tagIdx, bandBlockEnd(lines, s) - tagIdx + 1);
     return;
   }
-  const isTopStaff = (l) => /^    \\new\s+(Staff|TabStaff|DrumStaff|PianoStaff)(\s|\\|$)/.test(l) && !/\\new\s+Staff\s*=/.test(l);
   const mentions = (txt) => vars.some((v) => txt.includes(`\\${v}`)) || (token === "vocals" && txt.includes('= "lead"'));
-  for (let i = lines.length - 1; i >= 0; i--) {
-    if (isTopStaff(lines[i])) {
-      const e = bandBlockEnd(lines, i);
-      if (mentions(lines.slice(i, e + 1).join("\n"))) lines.splice(i, e - i + 1);
-    } else if (/^    \\new\s+Lyrics\b/.test(lines[i])) {
-      if (vars.some((v) => lines[i].includes(`\\${v}`))) lines.splice(i, 1);
-    }
+  // Collect every cut first, then splice descending: splicing blocks shifts
+  // all later line indices, so splicing lyrics afterward with stale indices
+  // would miss (this previously left backing/vocal Lyrics lines behind).
+  const { blocks, lyrics } = bandScoreTopBlocks(lines);
+  const cuts = [];
+  for (const { start, end } of blocks) {
+    if (mentions(lines.slice(start, end + 1).join("\n"))) cuts.push([start, end]);
   }
+  for (const i of lyrics) {
+    if (vars.some((v) => lines[i].includes(`\\${v}`))) cuts.push([i, i]);
+  }
+  cuts.sort((a, b) => b[0] - a[0]);
+  for (const [s, e] of cuts) lines.splice(s, e - s + 1);
 }
+
+// ---- Solo render: one sections/<section>/<token>.ily on its own ----
+// A section token is a fragment (\global etc. come from shared/shared.ily),
+// so "render this section only" synthesizes a minimal wrapper: the right
+// staff context per instrument family, playing just this file's root
+// variables (defined vars not referenced by siblings in the same file).
+const BAND_SETUP_VARS = new Set(["global", "drumGlobal"]);
+const BAND_SOLO_MIDI = {
+  guitar: "overdriven guitar", rhythm: "distorted guitar", bass: "electric bass (finger)",
+  keys: "acoustic grand", vocals: "voice oohs", backing: "voice oohs",
+};
+
+function bandParseDefs(body) {
+  const flat = String(body || "").replace(/%[^\n]*/g, "");
+  const defs = [];
+  const re = /(^|\n)\s*([A-Za-z][A-Za-z0-9]*)\s*=\s*(\\lyricmode\b)?/g;
+  let m;
+  while ((m = re.exec(flat))) defs.push({ name: m[2], lyrics: !!m[3] });
+  return { flat, defs };
+}
+
+async function renderBandSolo(project, section, token) {
+  const fail = (log) => ({ success: false, log, pdf: null, midi: null, pngs: [] });
+  const bp = bandPaths(project);
+  const sec = validBandWord(section), tok = validBandWord(token);
+  if (!bp || !sec || !tok) return fail("Solo render needs a valid project/section/token.");
+  const full = path.join(bp.sectionsDir, sec, `${tok}.ily`);
+  if (full !== bp.sectionsDir && !full.startsWith(bp.sectionsDir + path.sep)) return fail("Invalid section path.");
+  let body;
+  try { body = await fs.readFile(full, "utf8"); } catch (_) { return fail(`Could not read sections/${sec}/${tok}.ily.`); }
+  const { flat, defs } = bandParseDefs(body);
+  const isRef = (name) => (flat.match(new RegExp(`\\\\${name}\\b`, "g")) || []).length > 0;
+  const musicRoots = defs.filter((d) => !d.lyrics && !BAND_SETUP_VARS.has(d.name) && !isRef(d.name)).map((d) => d.name);
+  const lyricRoots = defs.filter((d) => d.lyrics && !isRef(d.name)).map((d) => d.name);
+  if (!musicRoots.length) return fail(`No playable music in sections/${sec}/${tok}.ily yet — replace the placeholder with real music.`);
+  const music = musicRoots[0], words = lyricRoots[0] || null;
+  const label = `${lilyCap(sec)} · ${lilyCap(tok)}`;
+  const midi = BAND_SOLO_MIDI[tok] || "acoustic grand";
+  let staff = "";
+  if (tok === "keys" && musicRoots.length >= 2) {
+    const up = musicRoots.find((r) => /RH$/i.test(r)) || musicRoots[0];
+    const lo = musicRoots.find((r) => /LH$/i.test(r) && r !== up) || musicRoots.find((r) => r !== up);
+    staff = `    \\new PianoStaff \\with {\n      instrumentName = "${label}"\n      midiInstrument = "${midi}"\n    } <<\n      \\new Staff = "upper" \\${up}\n      \\new Staff = "lower" \\${lo}\n    >>`;
+  } else if (tok === "drums") {
+    const setup = defs.some((d) => d.name === "drumGlobal") ? "      \\drumGlobal" : "      \\time 4/4";
+    const voices = musicRoots.map((r) => `        \\new DrumVoice \\${r}`).join("\n");
+    staff = `    \\new DrumStaff \\with {\n      instrumentName = "${label}"\n    } {\n${setup}\n      <<\n${voices}\n      >>\n    }`;
+  } else if (words) {
+    staff = `    \\new Staff \\with {\n      instrumentName = "${label}"\n      midiInstrument = "${midi}"\n    } {\n      \\new Voice = "v" { \\${music} }\n    }\n    \\new Lyrics \\lyricsto "v" \\${words}`;
+  } else if ((tok === "guitar" || tok === "rhythm") && musicRoots.length === 1) {
+    staff = `    \\new Staff \\with {\n      instrumentName = "${label}"\n      midiInstrument = "${midi}"\n    } {\n      \\clef "treble_8"\n      \\${music}\n    }\n    \\new TabStaff \\with {\n      instrumentName = "${label} Tab"\n      midiInstrument = "${midi}"\n    } {\n      \\${music}\n    }`;
+  } else if (musicRoots.length === 1) {
+    staff = `    \\new Staff \\with {\n      instrumentName = "${label}"\n      midiInstrument = "${midi}"\n    } \\${music}`;
+  } else {
+    staff = `    \\new Staff \\with {\n      instrumentName = "${label}"\n      midiInstrument = "${midi}"\n    } { ${musicRoots.map((r) => `\\${r}`).join(" ")} }`;
+  }
+  let version = "2.24.4", tempo = null;
+  try {
+    const w = await fs.readFile(bp.wrapper, "utf8");
+    const vm = w.match(/\\version\s+"([^"]+)"/);
+    if (vm) version = vm[1];
+  } catch (_) {}
+  try {
+    const shared = await fs.readFile(path.join(bp.root, "shared", "shared.ily"), "utf8");
+    const tm = shared.match(/\\tempo\s+\d+\s*=\s*(\d+)/);
+    if (tm) tempo = tm[1];
+  } catch (_) {}
+  const incs = [];
+  try { await fs.stat(path.join(bp.root, "shared", "shared.ily")); incs.push(`\\include "${bp.name}/shared/shared.ily"`); } catch (_) {}
+  incs.push(`\\include "${bp.name}/sections/${sec}/${tok}.ily"`);
+  const code = `\\version "${version}"
+% Solo render: ${sec} · ${tok} — the full song is ${bp.name}/full-band.ly.
+${incs.join("\n")}
+
+\\header { title = "${label}" }
+
+\\score {
+  <<
+${staff}
+  >>
+  \\layout { }
+  \\midi {${tempo ? ` \\tempo 4 = ${tempo}` : ""} }
+}
+`;
+  return compileLilypond(code, `${bp.name}/sections/${sec}/${tok}.ily`);
+}
+
+app.post("/api/band/render", async (req, res) => {
+  try {
+    const { project, section, token } = req.body || {};
+    const result = await renderBandSolo(project, section, token);
+    const urls = await publishPreview(result);
+    res.json({
+      success: result.success,
+      log: result.log,
+      name: `${String(project || "")}/sections/${String(section || "")}/${String(token || "")}.ily`,
+      label: `${lilyCap(String(section || ""))} · ${lilyCap(String(token || ""))}`,
+      pdf: result.pdf ? toDataUrl(result.pdf, "application/pdf") : null,
+      midi: result.midi ? toDataUrl(result.midi, "audio/midi") : null,
+      pngs: result.pngs.map((p) => toDataUrl(p.data, "image/png")),
+      pages: result.pngs.length,
+      hasMidi: !!result.midi,
+      urls: {
+        pdf: urls.pdfUrl,
+        midi: urls.midiUrl,
+        png: urls.pngUrls[0] || null,
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, log: String(e?.message || e) });
+  }
+});
 
 app.get("/api/band", async (req, res) => {
   const info = await bandStructure(req.query.project);
@@ -957,20 +1107,28 @@ async function autoCompileFile(file) {
       return;
     }
     console.log(`  Auto-compiling ${file}…`);
-    // An .ily save actually compiles its resolved wrapper.
-    let target = file;
-    let compileCode = code;
-    if (/\.ily$/i.test(file)) {
-      const wrapper = await resolveIlyWrapper(file);
-      if (wrapper) {
-        try { compileCode = await fs.readFile(path.join(WORKSPACE_DIR, wrapper), "utf8"); target = wrapper; } catch (_) { /* keep raw */ }
+    let result, target = file, label = null;
+    const solo = String(file).match(/^(.+)\/sections\/([^/]+)\/([^/]+)\.ily$/i);
+    if (solo) {
+      // A section token renders on its own, not as the whole song.
+      result = await renderBandSolo(solo[1], solo[2], solo[3]);
+      label = `${lilyCap(solo[2])} · ${lilyCap(solo[3])}`;
+    } else {
+      // An .ily save actually compiles its resolved wrapper.
+      let compileCode = code;
+      if (/\.ily$/i.test(file)) {
+        const wrapper = await resolveIlyWrapper(file);
+        if (wrapper) {
+          try { compileCode = await fs.readFile(path.join(WORKSPACE_DIR, wrapper), "utf8"); target = wrapper; } catch (_) { /* keep raw */ }
+        }
       }
+      result = await compileLilypond(compileCode, target);
     }
-    const result = await compileLilypond(compileCode, target);
     const urls = await publishPreview(result);
     broadcast({
       type: "auto-compiled",
       file,
+      label,
       success: result.success,
       log: result.log,
       pngUrls: urls.pngUrls,

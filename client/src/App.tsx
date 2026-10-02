@@ -104,10 +104,55 @@ export default function App() {
     }
   }
 
+  const showCompileResult = (data: any, compiledLabel: string | null) => {
+    setErrorLines([])
+    setStale(false)
+    if (data.success) {
+      setHasGood(true)
+      setStatus({ state: 'ok', text: `${data.pages} page(s)${compiledLabel ? ` (${compiledLabel})` : ''}` })
+      setPngUrls(data.pngs ?? [])
+      setPdfUrl(data.urls?.pdf ?? null)
+      setMidiUrl(data.urls?.midi ?? null)
+      if (data.urls?.midi) {
+        window.dispatchEvent(new CustomEvent('lily:midi', { detail: { url: data.urls.midi, autoplay: autoplay } }))
+      } else {
+        window.dispatchEvent(new CustomEvent('lily:midi-clear'))
+      }
+    } else {
+      setErrorLines((data.log ?? '').split('\n').filter((l: string) => /error|fatal/i.test(l)))
+      setStale(hasGood)
+      setStatus({ state: 'err', text: 'compile failed' })
+    }
+    setLog(data.log ?? '')
+  }
+
   const runCompile = async () => {
     if (!code.trim()) return
     setStatus({ state: 'busy', text: 'compiling…' })
-    // `.ily` files are fragments; the server resolves their compilable
+    // A section token (sections/<section>/<token>.ily) renders on its own —
+    // just that section's music — not the whole song.
+    const solo = selected.match(/^(.+)\/sections\/([^/]+)\/([^/]+)\.ily$/i)
+    if (selected.toLowerCase().endsWith('.ily') && solo) {
+      try {
+        // Save the edited ily so the solo render picks it up.
+        await api(`/api/file?name=${encodeURIComponent(selected)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code }),
+        })
+        const data = await api('/api/band/render', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project: solo[1], section: solo[2], token: solo[3] }),
+        })
+        showCompileResult(data, data.label ?? `${solo[2]} · ${solo[3]}`)
+      } catch (e) {
+        setStatus({ state: 'err', text: 'request failed' })
+        setLog((e as Error).message)
+      }
+      return
+    }
+    // Other `.ily` files are fragments; the server resolves their compilable
     // wrapper (sibling .ly, else the .ly whose \include graph references
     // them, preferring a "full" one) and compiles that instead.
     let compileCode = code
@@ -131,25 +176,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: compileCode, name: compileName }),
       })
-      setErrorLines([])
-      setStale(false)
-      if (data.success) {
-        setHasGood(true)
-        setStatus({ state: 'ok', text: `${data.pages} page(s)${data.name && data.name !== compileName ? ` (compiled ${data.name})` : ''}` })
-        setPngUrls(data.pngs ?? [])
-        setPdfUrl(data.urls?.pdf ?? null)
-        setMidiUrl(data.urls?.midi ?? null)
-        if (data.urls?.midi) {
-          window.dispatchEvent(new CustomEvent('lily:midi', { detail: { url: data.urls.midi, autoplay: autoplay } }))
-        } else {
-          window.dispatchEvent(new CustomEvent('lily:midi-clear'))
-        }
-      } else {
-        setErrorLines((data.log ?? '').split('\n').filter((l: string) => /error|fatal/i.test(l)))
-        setStale(hasGood)
-        setStatus({ state: 'err', text: 'compile failed' })
-      }
-      setLog(data.log ?? '')
+      showCompileResult(data, data.name && data.name !== compileName ? data.name : null)
     } catch (e) {
       setStatus({ state: 'err', text: 'request failed' })
       setLog((e as Error).message)
@@ -191,7 +218,7 @@ export default function App() {
             setPngUrls(msg.pngUrls ?? [])
             setPdfUrl(msg.pdfUrl ?? null)
             setMidiUrl(msg.midiUrl ?? null)
-            setStatus({ state: 'ok', text: `${msg.pages} page(s)` })
+            setStatus({ state: 'ok', text: `${msg.pages} page(s)${msg.label ? ` (${msg.label})` : ''}` })
             if (msg.midiUrl) window.dispatchEvent(new CustomEvent('lily:midi', { detail: { url: msg.midiUrl, autoplay } }))
           } else {
             setErrorLines((msg.log ?? '').split('\n').filter((l: string) => /error|fatal/i.test(l)))

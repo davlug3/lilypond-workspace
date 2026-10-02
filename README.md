@@ -29,6 +29,12 @@ Requires `lilypond` on PATH (you have 2.22.2). Check: `lilypond --version`.
     token files, restitch `full-band.ly` includes + `<x>Full` variables + lead
     voice, and add/remove the score staff (custom staves are tagged
     `% token:<name> (managed)`). Deleting the last section is refused.
+  - Opening a section file (`sections/<section>/<token>.ily`) renders only
+    that section: `POST /api/band/render { project, section, token }`
+    synthesizes a family-correct wrapper (PianoStaff/DrumStaff/Staff+Tab/
+    Staff+Lyrics) and returns the same payload as `/api/compile`, so preview
+    and MIDI cover just the section. Files with no playable music yet fail
+    gracefully.
   - `GET /api/version` — lilypond version string.
   - `GET /api/watch` — SSE stream; pushes `auto-compiled` events (with static
     `pngUrls`/`pdfUrl`/`midiUrl`, log, page count) whenever a workspace file is saved.
