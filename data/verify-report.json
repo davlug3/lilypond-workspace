@@ -1,0 +1,958 @@
+{
+  "lilypond": "GNU LilyPond 2.26.0 (running Guile 3.0)",
+  "generated": "2026-10-02T00:30:37.077Z",
+  "entries": {
+    "naming/no-digits-in-names": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "naming/lyrics-reserved": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "naming/whitespace": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "naming/define-before-use": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "naming/version-diagnostics": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "naming/set-vs-override": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "file/version": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "file/header": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "file/header-no-tagline": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "file/music-variable": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "file/global": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "file/score": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "file/score-no-layout": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "file/book": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "file/paper": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "file/layout-block": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "file/midi-block": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "file/include": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "file/midi-instrument": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "file/set-midi-instrument": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "file/skeleton": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "pitch/pitch-names": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "pitch/octave-marks": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "pitch/relative": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "pitch/relative-octave-up": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "pitch/relative-octave-down": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "pitch/accidentals": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "pitch/forced-accidental": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "pitch/language": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "pitch/key": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "pitch/clef": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "pitch/clef-octave": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "pitch/time": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "pitch/tempo": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "pitch/transpose": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "pitch/midi-transpose": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/durations": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/dots": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/carry-over": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/restate-after-rest": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/rest-pitched": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/rest-full-measure": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/spacer-r": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/tuplet": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/tie": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/slur": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/phrasing-slur": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/partial": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/bar-check": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/grace": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/acciaccatura": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/appoggiatura": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/bar-length-note": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "rhythm/compound-meter": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "polyphony/sequential": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "polyphony/simultaneous": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "polyphony/chord": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "polyphony/two-voices-staff": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "polyphony/voice-one": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "polyphony/voice-two": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "polyphony/voice-three-four": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "polyphony/one-voice": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "polyphony/spacer": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "polyphony/parallel-music": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "polyphony/backslash-separator": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "polyphony/chord-vs-voices": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "staves/context-tree": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "staves/new-staff": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "staves/new-staff-named": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "staves/piano-staff": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "staves/staff-group": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "staves/choir-staff": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "staves/new-voice-named": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "staves/instrument-name": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "staves/change-staff": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "staves/chordnames-context": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "staves/lyrics-context": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "staves/two-staves-simplest": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "staves/quartet": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "staves/satb": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "chords/chordmode": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "chords/chord-spellings": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "chords/inversion": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "chords/chordnames-context": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "chords/chordname-props": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "chords/chord-grid": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "chords/figured-bass": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "chords/lead-sheet": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "chords/mode-mixup": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "lyrics/lyricmode": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "lyrics/lyricsto": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "lyrics/hyphens": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "lyrics/melisma": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "lyrics/skip": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "lyrics/stanzas": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "lyrics/quotes": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "lyrics/lyric-counting": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/articulation-shorthand": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/articulation-commands": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/string-articulations": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/dynamics": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/hairpins": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/slur-family": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/breathe": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/ornaments": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/glissando-arpeggio": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/trill-span": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/script-directions": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/markup-commands": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/musicglyph": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/markup-structure": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/fonts-property": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "expressive/make-pango-font-tree-removed": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "expressive/mechanism-trio": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "timing/repeat-volta": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "timing/repeat-unfold": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "timing/repeat-percent": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "timing/repeat-tremolo": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "timing/alternative": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "timing/bar-commands": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "timing/bar-check-vs-bar": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "timing/beam-manual": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "timing/auto-beam": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "timing/cadenza": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "timing/polymeter": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "timing/break-commands": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "timing/fine": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "special/drummode": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "special/no-drumsstaff": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "special/drum-notes": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "special/drum-mid-change": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "special/tablature": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "special/staff-lines": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "special/remove-empty": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "special/remove-all-empty": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "special/hide-empty-lyrics": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "special/mensural-signs": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "layout/which-block": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "layout/set-paper-size": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "layout/set-paper-size-dims": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "layout/margins": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "layout/staff-size": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "layout/system-indent": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "layout/short-indent": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "layout/ragged-last": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "layout/ragged-right": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "layout/line-width": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "layout/spacing-sections": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "layout/text-marker": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "layout/page-properties": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "layout/spacing-lists": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "tweaks/override-shape": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "tweaks/set-shape": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "tweaks/set-vs-override-rule": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "tweaks/set-on-grob-fails": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "tweaks/revert": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "tweaks/tweak-op": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "tweaks/tweak-dotted": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "tweaks/span-commands": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "tweaks/common-notehead": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "tweaks/common-stem": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "tweaks/common-staffsymbol": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "tweaks/common-script": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "tweaks/common-slurbeam": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "tweaks/common-time-signature": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "tweaks/colors": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "tweaks/paper-colour-profile": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "tweaks/tweak-vs-override-choice": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "tweaks/layout-block-overrides": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "tweaks/examine": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "scheme/music-function": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "scheme/scalar-function": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "scheme/define-macro": {
+      "verdict": "unprobed",
+      "reason": "define-macro needs a concrete expansion to be worth verifying; the syntax above is the standard shape"
+    },
+    "scheme/schemes-file": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "scheme/hash-one": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "scheme/hash-two": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "scheme/false-is-not-false": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "scheme/variables-by-type": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "scheme/music-in-scheme": {
+      "verdict": "unprobed",
+      "reason": "ly:make-music is internal API and its signature is not stable across versions"
+    },
+    "scheme/scheme-inside-scheme": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "scheme/display-and-debug": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "scheme/guile-modules": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "scheme/syntax-modules": {
+      "verdict": "unprobed",
+      "reason": "a custom module with no consumers is not a meaningful probe"
+    },
+    "cli/default-output": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "cli/output-basename": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "cli/output-formats": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "cli/png-format": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "cli/svg-format": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "cli/eps-format": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "cli/backend-options": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "cli/no-point-and-click": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "cli/include-path": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "cli/eval-scheme": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "cli/dump-header": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "cli/log-level": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "cli/diagnostic-format": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "cli/exit-codes": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "cli/error-exit-code": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "cli/convert-ly": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "cli/lilypond-book": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "cli/check-script": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "cli/check-script-blind-spot": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "cli/render-preview": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "cli/version-pin": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "never/how-to-read": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "never/keysignature": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/whiteout": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/chordnamevoice": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/autochange": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/partcombine": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/fermata-markup": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/compress-bars": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/rest-duration": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/defaultbartype": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/markformatter": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/glyph-name-alist": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/featherdurations": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "never/bar-dash": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "never/roman-markup": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/font-family-roman": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "never/single-digit": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/compoundmeter": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/percent-shorthand": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/star-shorthand": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/german-chords": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/enablepolymeter": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/ellipsis-direction": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/bottom-space": {
+      "verdict": "ok",
+      "expectedFailure": true
+    },
+    "never/instrument-name": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "never/removed-engravers": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "never/wrong-in-the-table": {
+      "verdict": "unprobed",
+      "reason": "no probe supplied"
+    },
+    "templates/drum-part": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "templates/guitar-tab": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "templates/lead-sheet": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "templates/multi-movement-book": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "templates/piano-grand-staff": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "templates/satb-lyrics": {
+      "verdict": "ok",
+      "expectedFailure": false
+    },
+    "templates/string-quartet": {
+      "verdict": "ok",
+      "expectedFailure": false
+    }
+  }
+}

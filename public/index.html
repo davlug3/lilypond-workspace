@@ -26,12 +26,29 @@
 </header>
 
 <main>
+  <aside id="palette" aria-label="LilyPond syntax palette">
+    <div class="pal-head">
+      <div>
+        <h2>Syntax palette</h2>
+        <p id="palCounts">loading…</p>
+      </div>
+      <button id="palClose" title="Hide palette">×</button>
+    </div>
+    <p id="palMsg" class="pal-msg" aria-live="polite" hidden></p>
+    <input type="search" id="palFilter" placeholder="Filter snippets…" aria-label="Filter snippets" />
+    <select id="palScope" aria-label="Filter by scope">
+      <option value="">all scopes</option>
+    </select>
+    <div id="palCats"></div>
+  </aside>
+
   <section class="editor-pane">
     <div class="toolbar">
       <select id="fileSelect" title="Workspace file"></select>
       <button id="newBtn" title="New file">+ New</button>
       <button id="saveBtn" title="Save to workspace/*.ly">Save</button>
       <button id="compileBtn" class="primary">Compile ▶</button>
+      <button id="palToggle" title="Show or hide the syntax palette" aria-expanded="true">Palette</button>
     </div>
     <textarea id="editor" spellcheck="false" placeholder="Type LilyPond code here…"></textarea>
     <details open>
@@ -135,7 +152,9 @@
 </main>
 
 <script src="/midi-tools.js"></script>
+<script src="/lilypond-syntax.js"></script>
 <script src="/app.js"></script>
+<script src="/palette.js"></script>
 <script type="module" src="/sf2-player.js"></script>
 </body>
 </html>
