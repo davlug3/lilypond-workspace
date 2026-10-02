@@ -1,4 +1,5 @@
 import { createElement, useEffect, useRef, useState } from 'react'
+import { Editor } from '@monaco-editor/react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
@@ -12,6 +13,7 @@ export default function App() {
   const [version, setVersion] = useState('checking lilypond…')
   const [status, setStatus] = useState<{ state: 'idle' | 'busy' | 'ok' | 'err'; text: string }>({ state: 'idle', text: 'idle' })
   const [files, setFiles] = useState<string[]>([])
+  const [tree, setTree] = useState<any>(null)
   const [selected, setSelected] = useState('')
   const [log, setLog] = useState('Press Compile or type (auto-preview on).')
   const [auto, setAuto] = useState(true)
@@ -26,16 +28,23 @@ export default function App() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [midiUrl, setMidiUrl] = useState<string | null>(null)
   const [presets, setPresets] = useState<{ name: string; files: string[] }[]>([])
-  const editorRef = useRef<HTMLTextAreaElement>(null)
+  const [scaffoldKind, setScaffoldKind] = useState<'part' | 'staff' | 'instrument' | 'voice' | 'polyphony'>('part')
+  const [code, setCode] = useState('')
+  const [split, setSplit] = useState(50)
+  const [pngOpacity, setPngOpacity] = useState(() => { try { return Number(localStorage.getItem('pngOpacity') ?? 1) } catch { return 1 } })
+  const [pdfOpacity, setPdfOpacity] = useState(() => { try { return Number(localStorage.getItem('pdfOpacity') ?? 1) } catch { return 1 } })
+  useEffect(() => { try { localStorage.setItem('pngOpacity', String(pngOpacity)) } catch {} }, [pngOpacity])
+  useEffect(() => { try { localStorage.setItem('pdfOpacity', String(pdfOpacity)) } catch {} }, [pdfOpacity])
+  const codeRef = useRef('')
+  codeRef.current = code
   const eventSourceRef = useRef<EventSource | null>(null)
 
-  // Legacy keyboard/palette scripts expect a global scheduleCompile
+  // Auto-compile when the editor text settles
   useEffect(() => {
-    window.scheduleCompile = (immediate = false) => {
-      if (!auto) return
-      window.setTimeout(() => runCompile(), immediate ? 0 : 600)
-    }
-  })
+    if (!auto) return
+    const t = window.setTimeout(() => runCompile(), 600)
+    return () => window.clearTimeout(t)
+  }, [code, selected, auto])
 
   const api = async (url: string, init?: RequestInit) => {
     const r = await fetch(url, init)
@@ -48,13 +57,14 @@ export default function App() {
       const j = await api('/api/files')
       setFiles(j.files)
       if (sel) setSelected(sel)
+      try { const t = await api('/api/tree'); setTree(t.tree) } catch { /* noop */ }
     } catch { /* noop */ }
   }
 
   const loadFile = async (name: string) => {
     try {
       const j = await api(`/api/file?name=${encodeURIComponent(name)}`)
-      if (editorRef.current) editorRef.current.value = j.code
+      setCode(j.code)
       setSelected(name)
       runCompile()
     } catch (e) {
@@ -63,8 +73,7 @@ export default function App() {
   }
 
   const runCompile = async () => {
-    if (!editorRef.current) return
-    const code = editorRef.current.value
+    if (!code.trim()) return
     setStatus({ state: 'busy', text: 'compiling…' })
     try {
       const data = await api('/api/compile', {
@@ -97,15 +106,13 @@ export default function App() {
     }
   }
 
-  // Inject legacy audio scripts once (sf2-player, palette, mobile keyboard, midi-tools)
+  // Inject the legacy audio engine once (midi parser + SF2 player).
   useEffect(() => {
-    const scripts = ['/midi-tools.js', '/palette.js', '/mobile-keyboard.js']
-    scripts.forEach((src) => {
-      if (document.querySelector(`script[src="${src}"]`)) return
+    if (!document.querySelector('script[src="/midi-tools.js"]')) {
       const s = document.createElement('script')
-      s.src = src
+      s.src = '/midi-tools.js'
       document.body.appendChild(s)
-    })
+    }
     if (!document.querySelector('script[src="/sf2-player.js"]')) {
       const s = document.createElement('script')
       s.type = 'module'
@@ -142,11 +149,102 @@ export default function App() {
             setStatus({ state: 'err', text: 'compile failed' })
           }
           setLog(msg.log ?? '')
+          if (follow && msg.file === selected) {
+            api(`/api/file?name=${encodeURIComponent(msg.file)}`).then((j) => { if (j.code !== codeRef.current) setCode(j.code) }).catch(() => {})
+          }
         }
       } catch { /* noop */ }
     }
     return () => es.close()
   }, [follow, hasGood, autoplay])
+
+
+const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'polyphony', string> = {
+  part: `
+\\version "2.24.4"
+\\header { title = "{{NAME}} Part" }
+\\score {
+  \\new Staff \\with { instrumentName = "{{NAME}}" }
+  \\relative c'' {
+    \\time 4/4
+    c4 d e f | g2 r2 |
+  }
+  \\layout { }
+  \\midi { }
+}
+`,
+  staff: `
+\\version "2.24.4"
+\\header { title = "{{NAME}} Staff" }
+\\score {
+  \\new StaffGroup <<
+    \\new Staff \\with { instrumentName = "{{NAME}}" }
+    \\relative c' { \\time 4/4 c4 d e f | g2 r2 | }
+  >>
+  \\layout { }
+  \\midi { }
+}
+`,
+  instrument: `
+\\version "2.24.4"
+\\header { title = "{{NAME}} Instrument" }
+\\score {
+  \\new Staff \\with { instrumentName = "{{NAME}}" }
+  \\relative c'' {
+    \\time 4/4
+    c4 d e f | g2 r2 |
+  }
+  \\layout { }
+  \\midi { }
+}
+`,
+  voice: `
+\\version "2.24.4"
+\\header { title = "{{NAME}} Voices" }
+\\score {
+  \\new Staff <<
+    \\new Voice = "v1" { \\voiceOne \\relative c'' { \\time 4/4 c4 d e f | g2 r2 | } }
+    \\new Voice = "v2" { \\voiceTwo \\relative c' { \\time 4/4 c c c c | g2 r2 | } }
+  >>
+  \\layout { }
+  \\midi { }
+}
+`,
+  polyphony: `
+\\version "2.24.4"
+\\header { title = "{{NAME}} Polyphony" }
+\\score {
+  \\new StaffGroup <<
+    \\new Staff \\with { instrumentName = "Top" }
+    \\relative c'' { \\time 4/4 c4 <e g c> d | g2 r2 | }
+    \\new Staff \\with { instrumentName = "Bottom" }
+    \\relative c' { \\time 4/4 c4 d e f | g2 r2 | }
+  >>
+  \\layout { }
+  \\midi { }
+}
+`,
+}
+
+
+  const onScaffold = async () => {
+    const name = prompt(`Name for the new ${scaffoldKind} (no extension):`, `new-${scaffoldKind}`)
+    if (!name) return
+    const safe = name.trim().replace(/\s+/g, '-').toLowerCase()
+    if (!safe) return
+    const template = SCAFFOLD_TEMPLATES[scaffoldKind].replace(/{{NAME}}/g, safe)
+    try {
+      await api(`/api/file?name=${encodeURIComponent(safe + '.ly')}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: template }),
+      })
+      await refreshFiles(safe + '.ly')
+      loadFile(safe + '.ly')
+    } catch (e) {
+      setLog(`Create failed: ${(e as Error).message}`)
+    }
+  }
 
   const onPresetUse = async (name: string) => {
     try {
@@ -164,12 +262,12 @@ export default function App() {
   }
 
   const onSave = async () => {
-    if (!editorRef.current || !selected) return
+    if (!selected) return
     try {
       await api(`/api/file?name=${encodeURIComponent(selected)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: editorRef.current.value }),
+        body: JSON.stringify({ code }),
       })
       setStatus({ state: 'ok', text: 'saved' })
     } catch (e) {
@@ -193,29 +291,22 @@ export default function App() {
       </header>
 
       <main className="flex flex-col lg:flex-row gap-4 p-4">
-        <aside id="palette" className="w-full lg:w-64 shrink-0">
-          <div className="pal-head flex items-center justify-between">
-            <h2 className="font-semibold">Syntax palette</h2>
-            <button id="palClose" className="text-muted-foreground hover:text-foreground">×</button>
-          </div>
-          <p id="palMsg" aria-live="polite" hidden />
-          <p id="palCounts" className="text-xs text-muted-foreground" />
-          <input id="palFilter" type="search" placeholder="Filter snippets…" className="w-full border rounded p-2 my-2 text-sm" />
-          <select id="palScope" className="w-full border rounded p-2 mb-2 text-sm">
-            <option value="">all scopes</option>
-          </select>
-          <div id="palCats" className="space-y-2 max-h-[50vh] overflow-auto" />
-        </aside>
 
-        <section className="flex-1 min-w-0">
+        <section className="min-w-0" style={{ width: `${split}%` }}>
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <select id="fileSelect" className="border rounded p-2 text-sm" value={selected} onChange={(e) => loadFile(e.target.value)}>
               {files.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
-            <Button id="newBtn" className="h-8 px-3 text-sm border border-input bg-background hover:bg-accent" onClick={() => { const n = prompt('New file path inside workspace/', 'new-score.ly'); if (n) fetch(`/api/file?name=${encodeURIComponent(n)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: '% new score\n\\version "2.22.2"\n{ c4 d e f }\n' }) }).then(() => loadFile(n)) }}>+ New</Button>
+            <select id="scaffoldKind" className="border rounded p-1.5 text-sm" onChange={(e) => setScaffoldKind(e.target.value as 'part' | 'staff' | 'instrument' | 'voice' | 'polyphony')} value={scaffoldKind}>
+              <option value="part">Part</option>
+              <option value="staff">Staff</option>
+              <option value="instrument">Instrument</option>
+              <option value="voice">Voice</option>
+              <option value="polyphony">Polyphony</option>
+            </select>
+            <Button id="newBtn" className="h-8 px-3 text-sm border border-input bg-background hover:bg-accent" onClick={onScaffold}>+ New</Button>
             <Button id="saveBtn" className="h-8 px-3 text-sm border border-input bg-background hover:bg-accent" onClick={onSave}>Save</Button>
             <Button id="compileBtn" className="h-8 px-3 text-sm" onClick={() => runCompile()}>Compile ▶</Button>
-            <Button id="palToggle" className="h-8 px-3 text-sm border border-input bg-background hover:bg-accent">Palette</Button>
           </div>
 
           <details id="dirPanel" className="border rounded mb-2" open>
@@ -235,12 +326,60 @@ export default function App() {
               </section>
               <section className="p-3">
                 <h3 className="text-xs uppercase text-muted-foreground mb-2">Workspace</h3>
-                <div id="workspaceTree" className="text-sm">{files.length ? files.map((f) => <div key={f} className="py-0.5">{f}</div>) : <p className="text-muted-foreground">Empty — pick a preset.</p>}</div>
+                <div id="workspaceTree" className="text-sm">
+                  {tree && (tree.dirs.length > 0 || tree.files.length > 0) ? (
+                    <ul>
+                      {tree.dirs.map((d: any, i: number) => (
+                        <li key={i}>
+                          <details open>
+                            <summary className="cursor-pointer font-medium hover:underline">{d.name}/</summary>
+                            <ul className="pl-4">
+                              {d.dirs.map((dd: any, j: number) => (
+                                <li key={j}>
+                                  <details>
+                                    <summary className="cursor-pointer font-medium hover:underline">{dd.name}/</summary>
+                                    <ul className="pl-4">
+                                      {dd.files.map((f: any) => (
+                                        <li key={f.path}>
+                                          <button type="button" className="block w-full text-left py-0.5 hover:underline cursor-pointer" onClick={() => loadFile(f.path)}>{f.name}</button>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </details>
+                                </li>
+                              ))}
+                              {d.files.map((f: any) => (
+                                <li key={f.path}>
+                                  <button type="button" className="block w-full text-left py-0.5 hover:underline cursor-pointer" onClick={() => loadFile(f.path)}>{f.name}</button>
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        </li>
+                      ))}
+                      {tree.files.map((f: any) => (
+                        <li key={f.path}>
+                          <button type="button" className="block w-full text-left py-0.5 hover:underline cursor-pointer" onClick={() => loadFile(f.path)}>{f.name}</button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-muted-foreground">Empty — pick a preset.</p>
+                  )}
+                </div>
               </section>
             </div>
           </details>
 
-          <textarea id="editor" ref={editorRef} className="w-full h-96 border rounded p-3 font-mono text-sm" spellCheck={false} placeholder="Type LilyPond code here…" />
+          <div className="w-full h-96 border rounded overflow-hidden">
+            <Editor
+              height="28rem"
+              defaultLanguage="plaintext"
+              value={code}
+              onChange={(value) => setCode(value ?? '')}
+              options={{ minimap: { enabled: false }, fontSize: 13, wordWrap: 'on' }}
+            />
+          </div>
 
           <details open className="border rounded mt-2">
             <summary className="p-2 font-semibold cursor-pointer">Compiler log</summary>
@@ -256,9 +395,30 @@ export default function App() {
           {followNotice && <div id="watchNotice" className="mt-2 p-2 border rounded bg-yellow-50 text-sm">{followNotice}</div>}
         </section>
 
-        <div id="splitter" className="hidden lg:block w-px bg-border" />
+        <div
+          id="splitter"
+          className="hidden lg:block w-1 bg-border cursor-col-resize hover:bg-primary"
+          onMouseDown={(e) => {
+            e.preventDefault()
+            const main = document.querySelector('main')
+            if (!main) return
+            const startX = e.clientX
+            const startSplit = split
+            const onMove = (ev: MouseEvent) => {
+              const delta = ((ev.clientX - startX) / main.clientWidth) * 100
+              setSplit(Math.min(80, Math.max(20, startSplit + delta)))
+            }
+            const onUp = () => {
+              window.removeEventListener('mousemove', onMove)
+              window.removeEventListener('mouseup', onUp)
+            }
+            window.addEventListener('mousemove', onMove)
+            window.addEventListener('mouseup', onUp)
+          }}
+          onDoubleClick={() => setSplit(50)}
+        />
 
-        <section className="flex-1 min-w-0">
+        <section className="min-w-0" style={{ width: `${100 - split}%` }}>
           {errorLines.length > 0 && (
             <div id="errorBanner" role="alert" className="mb-2 p-3 border border-destructive rounded bg-destructive/5 text-sm text-destructive">
               <strong>Compile errors:</strong>
@@ -276,9 +436,9 @@ export default function App() {
             <div>
               <div className="flex items-center gap-3 mb-2 text-sm">
                 <a id="dlPng" href={pngUrls[0] ?? '#'} className="text-primary underline" download="preview.png">Download PNG</a>
-                <label>Score opacity <input id="pngOp" type="range" min={0} max={1} step={0.01} defaultValue={1} /></label>
+                <label>Score opacity <input id="pngOp" type="range" min={0} max={1} step={0.01} value={pngOpacity} onChange={(e) => setPngOpacity(Number(e.target.value))} /></label>
               </div>
-              <div id="pngWrap" className="border rounded p-2 overflow-auto bg-card">
+              <div id="pngWrap" className="border rounded p-2 overflow-auto bg-card" style={{ opacity: pngOpacity }}>
                 {pngUrls.length ? pngUrls.map((u, i) => <img key={i} src={u} alt={`page ${i + 1}`} className="w-full" />) : <p className="text-muted-foreground p-4">No render yet.</p>}
               </div>
             </div>
@@ -288,9 +448,9 @@ export default function App() {
             <div>
               <div className="flex items-center gap-3 mb-2 text-sm">
                 <a id="dlPdf" href={pdfUrl ?? '#'} className="text-primary underline" download="preview.pdf">Download PDF</a>
-                <label>PDF opacity <input id="pdfOp" type="range" min={0} max={1} step={0.01} defaultValue={1} /></label>
+                <label>PDF opacity <input id="pdfOp" type="range" min={0} max={1} step={0.01} value={pdfOpacity} onChange={(e) => setPdfOpacity(Number(e.target.value))} /></label>
               </div>
-              <iframe id="pdfFrame" title="PDF preview" className="w-full h-[70vh] border rounded" src={pdfUrl ?? undefined} />
+              <iframe id="pdfFrame" title="PDF preview" className="w-full h-[70vh] border rounded" src={pdfUrl ?? undefined} style={{ opacity: pdfOpacity }} />
             </div>
           )}
 
@@ -341,7 +501,6 @@ export default function App() {
         </section>
       </main>
 
-      <div id="mobileKeyboard" role="application" aria-label="LilyPond virtual keyboard" hidden />
     </div>
   )
 }

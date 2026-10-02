@@ -5,3 +5,4 @@ public/soundfonts/*
 !public/soundfonts/.gitkeep
 *.log
 .DS_Store
+workspace/
