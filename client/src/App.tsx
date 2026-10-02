@@ -1,5 +1,6 @@
 import { createElement, useEffect, useRef, useState } from 'react'
 import { Editor } from '@monaco-editor/react'
+import { useTheme } from '@/components/theme-provider'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
@@ -29,6 +30,8 @@ export default function App() {
   const [midiUrl, setMidiUrl] = useState<string | null>(null)
   const [presets, setPresets] = useState<{ name: string; files: string[] }[]>([])
   const [scaffoldKind, setScaffoldKind] = useState<'part' | 'staff' | 'instrument' | 'voice' | 'polyphony'>('part')
+  const { theme, setTheme } = useTheme()
+  const monacoTheme = theme === 'dark' ? 'vs-dark' : theme === 'light' ? 'vs' : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'vs-dark' : 'vs')
   const [code, setCode] = useState('')
   const [split, setSplit] = useState(50)
   const [pngOpacity, setPngOpacity] = useState(() => { try { return Number(localStorage.getItem('pngOpacity') ?? 1) } catch { return 1 } })
@@ -75,17 +78,42 @@ export default function App() {
   const runCompile = async () => {
     if (!code.trim()) return
     setStatus({ state: 'busy', text: 'compiling…' })
+    // `.ily` files are fragments; compile the sibling `.ly` wrapper instead
+    let compileCode = code
+    let compileName = selected || 'score'
+    if (selected && selected.toLowerCase().endsWith('.ily')) {
+      const selectedDir = selected.includes('/') ? selected.substring(0, selected.lastIndexOf('/')) : ''
+      const sibling = files.find((f) => {
+        const fDir = f.includes('/') ? f.substring(0, f.lastIndexOf('/')) : ''
+        return fDir === selectedDir && f.toLowerCase().endsWith('.ly')
+      })
+      if (sibling) {
+        try {
+          // Save the edited ily so the wrapper's \include picks it up.
+          await api(`/api/file?name=${encodeURIComponent(selected)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code }),
+          })
+          const j = await api(`/api/file?name=${encodeURIComponent(sibling)}`)
+          compileCode = j.code
+          compileName = sibling
+        } catch {
+          /* fall back to compiling the ily itself */
+        }
+      }
+    }
     try {
       const data = await api('/api/compile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, name: selected || 'score' }),
+        body: JSON.stringify({ code: compileCode, name: compileName }),
       })
       setErrorLines([])
       setStale(false)
       if (data.success) {
         setHasGood(true)
-        setStatus({ state: 'ok', text: `${data.pages} page(s)` })
+        setStatus({ state: 'ok', text: `${data.pages} page(s)${compileName !== selected ? ` (compiled ${compileName})` : ''}` })
         setPngUrls(data.pngs ?? [])
         setPdfUrl(data.urls?.pdf ?? null)
         setMidiUrl(data.urls?.midi ?? null)
@@ -277,7 +305,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b px-4 py-3 flex items-center justify-between">
+      <header className="border-b px-3 py-2 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-bold">My Workspace<span className="text-primary">.</span></h1>
           <p className="text-xs text-muted-foreground">{version}</p>
@@ -286,13 +314,16 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
           <label className="text-sm flex items-center gap-1">
             <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> auto-preview
           </label>
+          <button type="button" className="text-xs rounded border px-2 py-1" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle light/dark mode">
+            {theme === 'dark' ? '☾ Dark' : '☀ Light'}
+          </button>
           <span className={`px-3 py-1 rounded-full text-xs font-semibold ${status.state === 'err' ? 'bg-destructive/10 text-destructive' : status.state === 'busy' ? 'bg-yellow-500/10 text-yellow-600' : 'bg-green-500/10 text-green-600'}`} aria-live="polite">{status.text}</span>
         </div>
       </header>
 
-      <main className="flex flex-col lg:flex-row gap-4 p-4">
+      <main className="flex flex-col lg:flex-row gap-2 p-2 md:p-4">
 
-        <section className="min-w-0" style={{ width: `${split}%` }}>
+        <section className="min-w-0 w-full lg:w-[var(--split)]" style={{ ['--split']: `${split}%` } as any}>
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <select id="fileSelect" className="border rounded p-2 text-sm" value={selected} onChange={(e) => loadFile(e.target.value)}>
               {files.map((f) => <option key={f} value={f}>{f}</option>)}
@@ -304,9 +335,9 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
               <option value="voice">Voice</option>
               <option value="polyphony">Polyphony</option>
             </select>
-            <Button id="newBtn" className="h-8 px-3 text-sm border border-input bg-background hover:bg-accent" onClick={onScaffold}>+ New</Button>
-            <Button id="saveBtn" className="h-8 px-3 text-sm border border-input bg-background hover:bg-accent" onClick={onSave}>Save</Button>
-            <Button id="compileBtn" className="h-8 px-3 text-sm" onClick={() => runCompile()}>Compile ▶</Button>
+            <Button id="newBtn" variant="outline" size="sm" onClick={onScaffold}>+ New</Button>
+            <Button id="saveBtn" variant="outline" size="sm" onClick={onSave}>Save</Button>
+            <Button id="compileBtn" size="sm" onClick={() => runCompile()}>Compile ▶</Button>
           </div>
 
           <details id="dirPanel" className="border rounded mb-2" open>
@@ -314,53 +345,45 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
             <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border-t">
               <section className="p-3 border-r">
                 <h3 className="text-xs uppercase text-muted-foreground mb-2">Presets <span className="normal-case">read-only</span></h3>
-                <ul className="space-y-1 text-sm">
+                <ul className="space-y-1 text-sm max-h-48 overflow-auto">
                   {presets.map((p) => (
                     <li key={p.name} className="flex items-center justify-between gap-2">
                       <span>{p.name}</span>
                       <span className="text-xs text-muted-foreground">{p.files.length} files</span>
-                      <Button className="h-8 px-3 text-sm" onClick={() => onPresetUse(p.name)}>Use</Button>
+                      <Button size="sm" onClick={() => onPresetUse(p.name)}>Use</Button>
                     </li>
                   ))}
                 </ul>
               </section>
               <section className="p-3">
                 <h3 className="text-xs uppercase text-muted-foreground mb-2">Workspace</h3>
-                <div id="workspaceTree" className="text-sm">
+                <div id="workspaceTree" className="text-sm max-h-64 overflow-auto">
                   {tree && (tree.dirs.length > 0 || tree.files.length > 0) ? (
-                    <ul>
-                      {tree.dirs.map((d: any, i: number) => (
-                        <li key={i}>
+                    <ul className="space-y-0.5">
+                      {tree.dirs.map((d: any) => (
+                        <li key={d.path}>
                           <details open>
                             <summary className="cursor-pointer font-medium hover:underline">{d.name}/</summary>
-                            <ul className="pl-4">
-                              {d.dirs.map((dd: any, j: number) => (
-                                <li key={j}>
-                                  <details>
-                                    <summary className="cursor-pointer font-medium hover:underline">{dd.name}/</summary>
-                                    <ul className="pl-4">
-                                      {dd.files.map((f: any) => (
-                                        <li key={f.path}>
-                                          <button type="button" className="block w-full text-left py-0.5 hover:underline cursor-pointer" onClick={() => loadFile(f.path)}>{f.name}</button>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </details>
-                                </li>
+                            <div className="pl-4">
+                              {d.dirs.map((dd: any) => (
+                                <details key={dd.path}>
+                                  <summary className="cursor-pointer font-medium hover:underline">{dd.name}/</summary>
+                                  <div className="pl-4">
+                                    {dd.files.map((f: any) => (
+                                      <button key={f.path} type="button" className="block w-full text-left py-0.5 hover:underline cursor-pointer" onClick={() => loadFile(f.path)}>{f.name}</button>
+                                    ))}
+                                  </div>
+                                </details>
                               ))}
                               {d.files.map((f: any) => (
-                                <li key={f.path}>
-                                  <button type="button" className="block w-full text-left py-0.5 hover:underline cursor-pointer" onClick={() => loadFile(f.path)}>{f.name}</button>
-                                </li>
+                                <button key={f.path} type="button" className="block w-full text-left py-0.5 hover:underline cursor-pointer" onClick={() => loadFile(f.path)}>{f.name}</button>
                               ))}
-                            </ul>
+                            </div>
                           </details>
                         </li>
                       ))}
                       {tree.files.map((f: any) => (
-                        <li key={f.path}>
-                          <button type="button" className="block w-full text-left py-0.5 hover:underline cursor-pointer" onClick={() => loadFile(f.path)}>{f.name}</button>
-                        </li>
+                        <button key={f.path} type="button" className="block w-full text-left py-0.5 hover:underline cursor-pointer" onClick={() => loadFile(f.path)}>{f.name}</button>
                       ))}
                     </ul>
                   ) : (
@@ -371,9 +394,10 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
             </div>
           </details>
 
-          <div className="w-full h-96 border rounded overflow-hidden">
+          <div className="w-full h-[45vh] lg:h-96 border rounded overflow-hidden">
             <Editor
-              height="28rem"
+              theme={monacoTheme}
+              height="100%"
               defaultLanguage="plaintext"
               value={code}
               onChange={(value) => setCode(value ?? '')}
@@ -418,7 +442,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
           onDoubleClick={() => setSplit(50)}
         />
 
-        <section className="min-w-0" style={{ width: `${100 - split}%` }}>
+        <section className="min-w-0 w-full lg:w-[var(--remain)]" style={{ ['--remain']: `${100 - split}%` } as any}>
           {errorLines.length > 0 && (
             <div id="errorBanner" role="alert" className="mb-2 p-3 border border-destructive rounded bg-destructive/5 text-sm text-destructive">
               <strong>Compile errors:</strong>
@@ -427,7 +451,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
           )}
           <nav className="flex items-center gap-2 mb-2">
             {(['png', 'pdf', 'midi'] as const).map((t) => (
-              <Button key={t} className={tab === t ? 'h-8 px-3 text-sm' : 'h-8 px-3 text-sm border border-input bg-background hover:bg-accent'} onClick={() => setTab(t)}>{t.toUpperCase()}</Button>
+              <Button key={t} size="sm" variant={tab === t ? 'default' : 'outline'} onClick={() => setTab(t)}>{t.toUpperCase()}</Button>
             ))}
             {stale && <Badge className="bg-secondary text-secondary-foreground">showing last good version</Badge>}
           </nav>
@@ -450,7 +474,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
                 <a id="dlPdf" href={pdfUrl ?? '#'} className="text-primary underline" download="preview.pdf">Download PDF</a>
                 <label>PDF opacity <input id="pdfOp" type="range" min={0} max={1} step={0.01} value={pdfOpacity} onChange={(e) => setPdfOpacity(Number(e.target.value))} /></label>
               </div>
-              <iframe id="pdfFrame" title="PDF preview" className="w-full h-[70vh] border rounded" src={pdfUrl ?? undefined} style={{ opacity: pdfOpacity }} />
+              <iframe id="pdfFrame" title="PDF preview" className="w-full h-[50vh] lg:h-[70vh] border rounded" src={pdfUrl ?? undefined} style={{ opacity: pdfOpacity }} />
             </div>
           )}
 
@@ -467,9 +491,9 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
               <div id="mixerBox" hidden>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-sm">Section</span>
-                  <Button className="h-8 px-3 text-sm" data-section="full">Full</Button>
-                  <Button className="h-8 px-3 text-sm" data-section="verse">Verse</Button>
-                  <Button className="h-8 px-3 text-sm" data-section="chorus">Chorus</Button>
+                  <Button size="sm" data-section="full">Full</Button>
+                  <Button size="sm" data-section="verse">Verse</Button>
+                  <Button size="sm" data-section="chorus">Chorus</Button>
                   <label className="text-sm"><input id="loopBox" type="checkbox" /> loop</label>
                   <span id="sectionTimes" className="text-xs font-mono" />
                 </div>
@@ -482,17 +506,17 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
               </div>
               <div id="sf2Box" hidden>
                 <div className="flex items-center gap-2 mb-2">
-                  <Button id="sf2Play" className="h-8 px-3 text-sm">Play</Button>
-                  <Button id="sf2Pause" className="h-8 px-3 text-sm border border-input bg-background hover:bg-accent">Pause</Button>
-                  <Button id="sf2Stop" className="h-8 px-3 text-sm border border-input bg-background hover:bg-accent">Stop</Button>
+                  <Button id="sf2Play" size="sm">Play</Button>
+                  <Button id="sf2Pause" variant="outline" size="sm">Pause</Button>
+                  <Button id="sf2Stop" variant="outline" size="sm">Stop</Button>
                   <input id="sf2Seek" type="range" min={0} max={1000} value={0} className="flex-1" />
                   <span id="sf2Time" className="text-xs font-mono">0:00 / 0:00</span>
                 </div>
                 <div className="text-sm mb-2">
                   <input id="sf2File" type="file" accept=".sf2,.sf3,.dls,.sfogg" hidden />
                   <input id="sf2Url" type="url" placeholder="https://…/bank.sf2 or .sf3" hidden />
-                  <Button id="sf2LoadBtn" className="h-8 px-3 text-sm" hidden>Load bank</Button>
-                  <Button id="sf2DeleteBtn" className="h-8 px-3 text-sm" hidden>Delete saved bank</Button>
+                  <Button id="sf2LoadBtn" variant="outline" size="sm" hidden>Load bank</Button>
+                  <Button id="sf2DeleteBtn" variant="outline" size="sm" hidden>Delete saved bank</Button>
                 </div>
                 <p id="sf2Status" className="text-sm text-muted-foreground">SF2 engine idle.</p>
               </div>

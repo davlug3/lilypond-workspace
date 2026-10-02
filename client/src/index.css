@@ -49,8 +49,7 @@
   --chart-5: hsl(27 87% 67%);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+.dark {
   --background: #0d1117;
   --foreground: #e6edf3;
   --card: #161b22;
@@ -82,7 +81,7 @@
   --chart-2: hsl(160 60% 45%);
   --chart-3: hsl(30 80% 55%);
   --chart-4: hsl(280 65% 60%);
-  --chart-5: hsl(340 75% 55%);  }
+   --chart-5: hsl(340 75% 55%);
 }
 
 /* Map CSS variables to Tailwind theme with @theme inline */

@@ -59,7 +59,7 @@ async function listLyFiles() {
 // Returns { full, rel } or null when invalid.
 function resolveLy(raw) {
   const norm = path.normalize(String(raw || ""));
-  if (!norm.endsWith(".ly") || norm.startsWith("..") || path.isAbsolute(norm)) return null;
+  if (!/\.(ly|ily)$/i.test(norm) || norm.startsWith("..") || path.isAbsolute(norm)) return null;
   const full = path.join(WORKSPACE_DIR, norm);
   if (full !== WORKSPACE_DIR && !full.startsWith(WORKSPACE_DIR + path.sep)) return null;
   return { full, rel: norm.split(path.sep).join("/") };
@@ -210,7 +210,7 @@ async function listPresets() {
     if (e.isDirectory()) {
       const files = await listPresetFiles(full, e.name);
       if (files.length) presets.push({ name: e.name, kind: "directory", files });
-    } else if (e.isFile() && e.name.endsWith(".ly")) {
+    } else if (e.isFile() && /\.(ly|ily)$/i.test(e.name)) {
       presets.push({ name: e.name, kind: "file", files: [e.name] });
     }
   }
@@ -294,7 +294,7 @@ app.get("/api/files", async (_req, res) => {
 
 app.get("/api/file", async (req, res) => {
   const target = resolveLy(req.query.name);
-  if (!target) return res.status(400).json({ error: "missing ?name=*.ly (workspace-relative path)" });
+  if (!target) return res.status(400).json({ error: "missing ?name=*.ly/*.ily (workspace-relative path)" });
   try {
     const code = await fs.readFile(target.full, "utf8");
     res.json({ name: target.rel, code });
@@ -305,7 +305,7 @@ app.get("/api/file", async (req, res) => {
 
 app.put("/api/file", async (req, res) => {
   const target = resolveLy(req.query.name || req.body?.name);
-  if (!target) return res.status(400).json({ error: "missing ?name=*.ly (workspace-relative path)" });
+  if (!target) return res.status(400).json({ error: "missing ?name=*.ly/*.ily (workspace-relative path)" });
   try {
     await fs.mkdir(path.dirname(target.full), { recursive: true });
     await fs.writeFile(target.full, String(req.body?.code ?? ""), "utf8");
@@ -317,7 +317,7 @@ app.put("/api/file", async (req, res) => {
 
 app.delete("/api/file", async (req, res) => {
   const target = resolveLy(req.query.name || req.body?.name);
-  if (!target) return res.status(400).json({ error: "missing ?name=*.ly (workspace-relative path)" });
+  if (!target) return res.status(400).json({ error: "missing ?name=*.ly/*.ily (workspace-relative path)" });
   try {
     await fs.rm(target.full, { recursive: true, force: true });
     res.json({ ok: true, name: target.rel });
@@ -446,10 +446,10 @@ app.post("/api/watch-file", (req, res) => {
     watchedFile = null;
   } else {
     const rel = normalizeWatchName(raw);
-    if (!rel) return res.status(400).json({ error: "name must be a workspace-relative *.ly path" });
+    if (!rel) return res.status(400).json({ error: "name must be a workspace-relative *.ly/*.ily path" });
     watchedFile = rel;
   }
-  console.log(`  Watch file: ${watchedFile || "(any workspace .ly)"}`);
+  console.log(`  Watch file: ${watchedFile || "(any workspace .ly/.ily)"}`);
   res.json({ watchedFile });
 });
 
@@ -561,7 +561,7 @@ function watchDir(dir) {
     const w = fssync.watch(dir, (eventType, filename) => {
       if (filename) {
         const rel = path.relative(WORKSPACE_DIR, path.join(dir, filename)).split(path.sep).join("/");
-        if (rel.endsWith(".ly")) debounceAutoCompile(rel);
+        if (/\.(ly|ily)$/i.test(rel)) debounceAutoCompile(rel);
       }
       // New subdirectory may have appeared — pick it up.
       if (eventType === "rename") ensureDirWatchers();
@@ -582,7 +582,7 @@ setInterval(ensureDirWatchers, 15000).unref?.();
 
 app.listen(PORT, () => {
   console.log(`\n  LilyPond workspace: http://localhost:${PORT}`);
-  console.log(`  Edit files in ./workspace/**/*.ly  (watch enabled, recursive)`);
+  console.log(`  Edit files in ./workspace/**/*.{ly,ily}  (watch enabled, recursive)`);
   console.log(`  Watched file: ${watchedFile || "(any workspace .ly)"} — set via POST /api/watch-file or WATCH_FILE env`);
   console.log(`  Or use the browser editor with automatic preview.\n`);
 });
