@@ -101,5 +101,8 @@ workspace/           hello.ly, scale-midi.ly — edit/add your .ly files here
 workspace/rock-band/ "Midnight Wire" rock-band examples:
                    parts/*.ily (single source of truth — edit notes here),
                    01-08 thin score wrappers + 09-verse / 10-chorus sections
+presets/rock-band-2/ "Midnight Wire" tokenized sections:
+                   full-band.ly (canonical render) + shared/
+                   sections/{intro,verse,chorus}/{guitar,keys,drums,bass,vocals,backing,rhythm}.ily
 package.json
 ```

@@ -66,7 +66,7 @@ function resolveLy(raw) {
 }
 
 function includeDirsFor(name) {
-  // Files like "rock-band-2/08-full-band.ly" include sibling paths such as
+  // Files like "rock-band-2/full-band.ly" include sibling paths such as
   // "shared/shared.ily", which only resolve if LilyPond is run with the
   // score's own directory on its include path.
   const dirs = [WORKSPACE_DIR, path.join(WORKSPACE_DIR, "rock-band")];

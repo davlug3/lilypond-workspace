@@ -1,14 +1,42 @@
 \version "2.24.4"
 % Full rock band. All notes live in each part folder — edit there.
 % Breaks mark the form: verse | build | chorus | stop+tag.
+
 \include "shared/shared.ily"
-\include "vocals-lead/lead.ily"
-\include "vocals-backing/backing.ily"
-\include "piano/piano.ily"
-\include "guitar1/guitar1.ily"
-\include "guitar2/guitar2.ily"
-\include "bass/bass.ily"
-\include "drums/drums.ily"
+\include "sections/intro/guitar.ily"
+\include "sections/intro/keys.ily"
+\include "sections/intro/drums.ily"
+\include "sections/intro/bass.ily"
+\include "sections/intro/vocals.ily"
+\include "sections/intro/backing.ily"
+\include "sections/intro/rhythm.ily"
+\include "sections/verse/guitar.ily"
+\include "sections/verse/keys.ily"
+\include "sections/verse/drums.ily"
+\include "sections/verse/bass.ily"
+\include "sections/verse/vocals.ily"
+\include "sections/verse/backing.ily"
+\include "sections/verse/rhythm.ily"
+\include "sections/chorus/guitar.ily"
+\include "sections/chorus/keys.ily"
+\include "sections/chorus/drums.ily"
+\include "sections/chorus/bass.ily"
+\include "sections/chorus/vocals.ily"
+\include "sections/chorus/backing.ily"
+\include "sections/chorus/rhythm.ily"
+
+% Stitched variables: full-band view = verse + chorus.
+leadFull = { \leadVerse \leadChorus }
+leadWordsFull = \lyricmode { \leadWordsVerse \leadWordsChorus }
+backingFull = { \backingVerse \backingChorus }
+backingWordsFull = \lyricmode { \backingWordsVerse \backingWordsChorus }
+pianoFullRH = { \pianoVerseRH \pianoChorusRH }
+pianoFullLH = { \pianoVerseLH \pianoChorusLH }
+guitarFull = { \guitarVerse \guitarChorus }
+rhythmFull = { \rhythmVerse \rhythmChorus }
+bassFull = { \bassVerse \bassChorus }
+drumFullHands = { \drumVerseHands \drumChorusHands }
+drumFullFeet = { \drumVerseFeet \drumChorusFeet }
 
 #(set-global-staff-size 15)
 

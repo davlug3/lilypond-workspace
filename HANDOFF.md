@@ -144,19 +144,21 @@ Old files to be removed: `08/09/10-*-band.ly` top-level wrappers and the
 per-instrument `guitar1/ guitar2/ piano/ bass/ drums/ vocals-lead/
 vocals-backing/` directories (content moved into `sections/`).
 
-**State:** Not yet started in the filesystem. Preset dirs are currently
-read-only (`dr-xr-xr-x`); `chmod -R u+w` is required before editing.
+**State:** Done (Oct 02 2026). `presets/rock-band-2/` restructured to
+`full-band.ly` + `shared/` + `sections/{intro,verse,chorus}/*.ily`; old
+`08/09/10-*.ly` wrappers and per-instrument dirs removed. Compiles clean;
+`full-band.midi` is byte-identical to the old `08-full-band.ly` render.
 
 ## Todos
 
 ### High priority (next session)
-- [ ] `chmod -R u+w presets/rock-band-2`
-- [ ] Implement the `sections/{intro,verse,chorus}` split (files above).
-- [ ] Create `full-band.ly` stitching includes + combined variables + score block.
-- [ ] Remove old `08/09/10-*.ly` and old instrument directories.
+- [x] `chmod -R u+w presets/rock-band-2`
+- [x] Implement the `sections/{intro,verse,chorus}` split (files above).
+- [x] Create `full-band.ly` stitching includes + combined variables + score block.
+- [x] Remove old `08/09/10-*.ly` and old instrument directories.
 - [x] Commit `client/src/lib/lilypondLanguage.ts` trigger fix (`67bb328`).
-- [ ] Compile `full-band.ly` locally to verify LilyPond syntax (if `lilypond`
-      is installed) before declaring done.
+- [x] Compile `full-band.ly` locally to verify LilyPond syntax; MIDI output
+      verified byte-identical to old `08-full-band.ly`.
 
 ### Medium priority
 - [ ] Tokenize LilyPond command groups in `lilypondLanguage.ts`
@@ -200,7 +202,7 @@ cd client && npx eslint src --max-warnings 0
 
 ### Verification status (last session)
 - `client/src/lib/lilypondLanguage.ts` trigger fix: `tsc` ✓, `npm run build` ✓.
-- `rock-band-2` restructure: not started.
+- `rock-band-2` restructure: `lilypond full-band.ly` ✓, MIDI identical to old render ✓.
 
 ## Contact / context
 
