@@ -29,18 +29,35 @@ function TreeFiles({ node, depth, selected, onOpen }: { node: any; depth: number
   )
 }
 
+// UI state that survives reloads. Transient or bulky data (compile status,
+// log, PNG/PDF/MIDI payloads, file listings) is deliberately excluded.
+function loadStored<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw !== null ? (JSON.parse(raw) as T) : fallback
+  } catch { return fallback }
+}
+
+function usePersistentState<T>(key: string, initial: T) {
+  const [value, setValue] = useState<T>(() => loadStored(key, initial))
+  useEffect(() => {
+    try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* storage full/blocked */ }
+  }, [key, value])
+  return [value, setValue] as const
+}
+
 export default function App() {
   const [version, setVersion] = useState('checking lilypond…')
   const [status, setStatus] = useState<{ state: 'idle' | 'busy' | 'ok' | 'err'; text: string }>({ state: 'idle', text: 'idle' })
   const [files, setFiles] = useState<string[]>([])
   const [tree, setTree] = useState<any>(null)
-  const [selected, setSelected] = useState('')
+  const [selected, setSelected] = usePersistentState('lily:selected', '')
   const [log, setLog] = useState('Press Compile or type (auto-preview on).')
-  const [auto, setAuto] = useState(true)
-  const [follow, setFollow] = useState(true)
-  const [autoplay, setAutoplay] = useState(true)
+  const [auto, setAuto] = usePersistentState('lily:auto', true)
+  const [follow, setFollow] = usePersistentState('lily:follow', true)
+  const [autoplay, setAutoplay] = usePersistentState('lily:autoplay', true)
   const [followNotice, setFollowNotice] = useState('')
-  const [tab, setTab] = useState<'png' | 'pdf' | 'midi'>('png')
+  const [tab, setTab] = usePersistentState<'png' | 'pdf' | 'midi'>('lily:tab', 'png')
   const [errorLines, setErrorLines] = useState<string[]>([])
   const [hasGood, setHasGood] = useState(false)
   const [stale, setStale] = useState(false)
@@ -48,21 +65,24 @@ export default function App() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [midiUrl, setMidiUrl] = useState<string | null>(null)
   const [presets, setPresets] = useState<{ name: string; files: string[] }[]>([])
+  const [presetChoice, setPresetChoice] = usePersistentState('lily:presetChoice', '')
+  const [presetLoading, setPresetLoading] = useState(false)
   const [band, setBand] = useState<any>(null)
-  const [newSection, setNewSection] = useState('')
-  const [newToken, setNewToken] = useState('')
-  const [newLabel, setNewLabel] = useState('')
-  const [newMidi, setNewMidi] = useState('')
-  const [newClef, setNewClef] = useState('treble')
-  const [scaffoldKind, setScaffoldKind] = useState<'part' | 'staff' | 'instrument' | 'voice' | 'polyphony'>('part')
+  const [newSection, setNewSection] = usePersistentState('lily:newSection', '')
+  const [newToken, setNewToken] = usePersistentState('lily:newToken', '')
+  const [newLabel, setNewLabel] = usePersistentState('lily:newLabel', '')
+  const [newMidi, setNewMidi] = usePersistentState('lily:newMidi', '')
+  const [newClef, setNewClef] = usePersistentState('lily:newClef', 'treble')
+  const [scaffoldKind, setScaffoldKind] = usePersistentState<'part' | 'staff' | 'instrument' | 'voice' | 'polyphony'>('lily:scaffoldKind', 'part')
   const { theme, setTheme } = useTheme()
   const monacoTheme = theme === 'dark' ? 'lilypond-dark' : theme === 'light' ? 'lilypond-light' : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'lilypond-dark' : 'lilypond-light')
   const [code, setCode] = useState('')
-  const [split, setSplit] = useState(50)
-  const [pngOpacity, setPngOpacity] = useState(() => { try { return Number(localStorage.getItem('pngOpacity') ?? 1) } catch { return 1 } })
-  const [pdfOpacity, setPdfOpacity] = useState(() => { try { return Number(localStorage.getItem('pdfOpacity') ?? 1) } catch { return 1 } })
-  useEffect(() => { try { localStorage.setItem('pngOpacity', String(pngOpacity)) } catch {} }, [pngOpacity])
-  useEffect(() => { try { localStorage.setItem('pdfOpacity', String(pdfOpacity)) } catch {} }, [pdfOpacity])
+  const [split, setSplit] = usePersistentState('lily:split', 50)
+  const [wordWrap, setWordWrap] = usePersistentState('lily:wordWrap', true)
+  const [toolPos, setToolPos] = usePersistentState('lily:toolbarPos', { x: 16, y: 96 })
+  const toolDragRef = useRef<{ dx: number; dy: number } | null>(null)
+  const [pngOpacity, setPngOpacity] = usePersistentState('pngOpacity', 1)
+  const [pdfOpacity, setPdfOpacity] = usePersistentState('pdfOpacity', 1)
   const codeRef = useRef('')
   codeRef.current = code
   const eventSourceRef = useRef<EventSource | null>(null)
@@ -90,7 +110,8 @@ export default function App() {
       setFiles(j.files)
       if (sel) setSelected(sel)
       try { const t = await api('/api/tree'); setTree(t.tree) } catch { /* noop */ }
-    } catch { /* noop */ }
+      return (j.files ?? []) as string[]
+    } catch { return [] as string[] }
   }
 
   const loadFile = async (name: string) => {
@@ -338,6 +359,8 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
   }
 
   const onPresetUse = async (name: string) => {
+    if (!name || presetLoading) return
+    setPresetLoading(true)
     try {
       const r = await api('/api/presets/use', {
         method: 'POST',
@@ -349,6 +372,8 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
       setStatus({ state: 'ok', text: `preset: ${name}` })
     } catch (e) {
       setLog(String((e as Error).message))
+    } finally {
+      setPresetLoading(false)
     }
   }
 
@@ -378,6 +403,16 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
 
   // Refresh the band panel whenever the open file or tree changes.
   useEffect(() => { loadBand(bandProjectOf(selected)) }, [selected, tree])
+
+  // Reopen the previously selected file once on load (state is persisted).
+  const restoredRef = useRef(false)
+  useEffect(() => {
+    if (restoredRef.current) return
+    restoredRef.current = true
+    const sel = loadStored<string>('lily:selected', '')
+    if (!sel) return
+    refreshFiles().then((list) => { if (list.includes(sel)) loadFile(sel) })
+  }, [])
 
   const bandMutate = async (url: string, init: RequestInit, what: string) => {
     try {
@@ -430,6 +465,40 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      {/* Floating toolbar: drag by the grip, position persists. */}
+      <div
+        role="toolbar"
+        aria-label="Floating tools"
+        className="fixed z-50 flex items-center gap-1 rounded-md border bg-card/95 p-1 shadow-lg backdrop-blur"
+        style={{ left: toolPos.x, top: toolPos.y, touchAction: 'none' }}
+        onPointerDown={(e) => {
+          if ((e.target as HTMLElement).closest('button')) return
+          toolDragRef.current = { dx: e.clientX - toolPos.x, dy: e.clientY - toolPos.y }
+          ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+        }}
+        onPointerMove={(e) => {
+          if (!toolDragRef.current) return
+          setToolPos({
+            x: Math.max(0, e.clientX - toolDragRef.current.dx),
+            y: Math.max(0, e.clientY - toolDragRef.current.dy),
+          })
+        }}
+        onPointerUp={() => { toolDragRef.current = null }}
+        onPointerCancel={() => { toolDragRef.current = null }}
+      >
+        <span className="cursor-move px-1 text-muted-foreground select-none" title="Drag toolbar" aria-hidden>⋮⋮</span>
+        <Button
+          size="sm"
+          variant={wordWrap ? 'default' : 'outline'}
+          title="Toggle editor word wrap"
+          aria-pressed={wordWrap}
+          onClick={() => setWordWrap(!wordWrap)}
+        >
+          wrap
+        </Button>
+        <Button size="sm" variant="outline" disabled title="Vacant slot">·</Button>
+        <Button size="sm" variant="outline" disabled title="Vacant slot">·</Button>
+      </div>
       <header className="border-b px-3 py-2 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-bold">My Workspace<span className="text-primary">.</span></h1>
@@ -470,20 +539,22 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
             <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border-t">
               <section className="p-3 border-r">
                 <h3 className="text-xs uppercase text-muted-foreground mb-2">Presets <span className="normal-case">read-only</span></h3>
-                <select
-                  className="border rounded p-2 text-sm w-full"
-                  defaultValue=""
-                  aria-label="Load a preset"
-                  onChange={(e) => {
-                    if (e.target.value) onPresetUse(e.target.value)
-                    e.target.value = ""
-                  }}
-                >
-                  <option value="" disabled>Choose a preset…</option>
-                  {presets.map((p) => (
-                    <option key={p.name} value={p.name}>{p.name} ({p.files.length} files)</option>
-                  ))}
-                </select>
+                <div className="flex gap-1">
+                  <select
+                    className="border rounded p-2 text-sm flex-1 min-w-0"
+                    value={presetChoice}
+                    aria-label="Choose a preset"
+                    onChange={(e) => setPresetChoice(e.target.value)}
+                  >
+                    <option value="" disabled>Choose a preset…</option>
+                    {presets.map((p) => (
+                      <option key={p.name} value={p.name}>{p.name} ({p.files.length} files)</option>
+                    ))}
+                  </select>
+                  <Button size="sm" variant="outline" disabled={!presetChoice || presetLoading} onClick={() => onPresetUse(presetChoice)}>
+                    {presetLoading ? 'Loading…' : 'Use'}
+                  </Button>
+                </div>
               </section>
               <section className="p-3">
                 <h3 className="text-xs uppercase text-muted-foreground mb-2">Workspace</h3>
@@ -559,7 +630,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
               }}
               value={code}
               onChange={(value) => setCode(value ?? '')}
-              options={{ minimap: { enabled: false }, fontSize: 13, wordWrap: 'on' }}
+              options={{ minimap: { enabled: false }, fontSize: 13, wordWrap: wordWrap ? 'on' : 'off' }}
             />
           </div>
 
