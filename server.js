@@ -10,15 +10,16 @@ const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const WORKSPACE_DIR = path.join(ROOT, "workspace");
 const PRESETS_DIR = path.join(ROOT, "presets");
-const PUBLIC_DIR = path.join(ROOT, "public");
-const SOUNDFONTS_DIR = path.join(PUBLIC_DIR, "soundfonts");
+const DIST_DIR = path.join(ROOT, "client", "dist");
+const SOUNDFONTS_DIR = path.join(ROOT, "public", "soundfonts");
 const SF_EXTS = new Set([".sf2", ".sf3", ".dls", ".sfogg"]);
 
 fssync.mkdirSync(WORKSPACE_DIR, { recursive: true });
 fssync.mkdirSync(SOUNDFONTS_DIR, { recursive: true });
 
 app.use(express.json({ limit: "2mb" }));
-app.use(express.static(PUBLIC_DIR));
+app.use(express.static(DIST_DIR));
+app.use("/soundfonts", express.static(SOUNDFONTS_DIR));
 
 function safeSoundfontName(name) {
   const base = path.basename(String(name || "")).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
@@ -64,24 +65,31 @@ function resolveLy(raw) {
   return { full, rel: norm.split(path.sep).join("/") };
 }
 
-function runLilypond(inputFile, outPrefix) {
+function includeDirsFor(name) {
+  // Files like "rock-band-2/08-full-band.ly" include sibling paths such as
+  // "shared/shared.ily", which only resolve if LilyPond is run with the
+  // score's own directory on its include path.
+  const dirs = [WORKSPACE_DIR, path.join(WORKSPACE_DIR, "rock-band")];
+  const rel = String(name || "");
+  const idx = rel.lastIndexOf("/");
+  if (idx > 0) {
+    const relDir = rel.slice(0, idx);
+    const norm = path.normalize(relDir);
+    if (!norm.startsWith("..") && !path.isAbsolute(norm)) {
+      dirs.push(path.join(WORKSPACE_DIR, norm));
+    }
+  }
+  return [...new Set(dirs)];
+}
+
+function runLilypond(inputFile, outPrefix, dirs) {
   return new Promise((resolve) => {
+    const args = ["--png", "--pdf", "-o", outPrefix];
+    for (const d of dirs || includeDirsFor("")) args.push("-I", d);
+    args.push(inputFile);
     execFile(
       "lilypond",
-      [
-        "--png",
-        "--pdf",
-        "-o",
-        outPrefix,
-        // Resolve file-relative \include paths (e.g. "parts/shared.ily"):
-        // tmp-dir compiles lose the score's directory, so offer the
-        // workspace tree as fallback search roots (browser editor too).
-        "-I",
-        WORKSPACE_DIR,
-        "-I",
-        path.join(WORKSPACE_DIR, "rock-band"),
-        inputFile,
-      ],
+      args,
       { timeout: 30000, maxBuffer: 10 * 1024 * 1024 },
       (error, stdout, stderr) => {
         resolve({ error, stdout: String(stdout || ""), stderr: String(stderr || "") });
@@ -97,7 +105,7 @@ async function compileLilypond(code, name = "score") {
   const outPrefix = path.join(tmpDir, "output");
   await fs.writeFile(lyFile, code, "utf8");
 
-  const { error, stdout, stderr } = await runLilypond(lyFile, outPrefix);
+  const { error, stdout, stderr } = await runLilypond(lyFile, outPrefix, includeDirsFor(name));
   const log = `${stdout}\n${stderr}`.trim();
   const success = !error || /Success: compilation successfully completed/.test(log);
 
@@ -139,23 +147,23 @@ async function publishPreview(result) {
   const stamp = Date.now();
   const out = { pngUrls: [], pdfUrl: null, midiUrl: null };
   try {
-    const existing = await fs.readdir(PUBLIC_DIR);
+    const existing = await fs.readdir(DIST_DIR);
     await Promise.all(
       existing
         .filter((f) => f.startsWith("preview"))
-        .map((f) => fs.rm(path.join(PUBLIC_DIR, f), { force: true }))
+        .map((f) => fs.rm(path.join(DIST_DIR, f), { force: true }))
     );
     if (result.pdf) {
-      await fs.writeFile(path.join(PUBLIC_DIR, "preview.pdf"), result.pdf);
+      await fs.writeFile(path.join(DIST_DIR, "preview.pdf"), result.pdf);
       out.pdfUrl = `/preview.pdf?t=${stamp}`;
     }
     if (result.midi) {
-      await fs.writeFile(path.join(PUBLIC_DIR, "preview.midi"), result.midi);
+      await fs.writeFile(path.join(DIST_DIR, "preview.midi"), result.midi);
       out.midiUrl = `/preview.midi?t=${stamp}`;
     }
     for (let i = 0; i < result.pngs.length; i++) {
       const fname = result.pngs.length === 1 ? "preview.png" : `preview-page${i + 1}.png`;
-      await fs.writeFile(path.join(PUBLIC_DIR, fname), result.pngs[i].data);
+      await fs.writeFile(path.join(DIST_DIR, fname), result.pngs[i].data);
       out.pngUrls.push(`/${fname}?t=${stamp}`);
     }
   } catch (_) {
@@ -393,7 +401,7 @@ app.delete("/api/soundfonts/:name", async (req, res) => {
 // Returns JSON with data URLs + also writes latest to public/preview.* for direct <img>/<iframe> use.
 app.post("/api/compile", async (req, res) => {
   const code = String(req.body?.code ?? "");
-  const name = safeName(req.body?.name || "score");
+  const name = String(req.body?.name || "score");
   if (!code.trim()) return res.status(400).json({ success: false, log: "Empty score." });
   try {
     const result = await compileLilypond(code, name);
@@ -471,7 +479,7 @@ async function autoCompileFile(file) {
       return;
     }
     console.log(`  Auto-compiling ${file}…`);
-    const result = await compileLilypond(code, file.replace(/\.ly$/, ""));
+    const result = await compileLilypond(code, file);
     const urls = await publishPreview(result);
     broadcast({
       type: "auto-compiled",
