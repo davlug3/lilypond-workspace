@@ -19,31 +19,33 @@ type EntryOps = {
 }
 
 function TreeFiles({ node, depth, selected, onOpen, ops }: { node: any; depth: number; selected: string; onOpen: (p: string) => void; ops: EntryOps }) {
+  // 44px minimum touch targets; whole rows highlight on hover.
+  const touchBtn = "inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-md text-lg hover:bg-accent shrink-0";
   return (
     <>
       {node.dirs.map((d: any) => (
         <details key={d.path} open={depth < 1}>
-          <summary className="cursor-pointer font-medium hover:underline">
+          <summary className="cursor-pointer font-medium rounded-md hover:bg-accent min-h-[44px] flex items-center px-1">
             <span className="inline-flex items-center gap-1 flex-wrap">
-              <span>{d.name}/</span>
-              <span className="inline-flex gap-1 text-xs font-normal" onClick={(e) => e.preventDefault()}>
-                <button type="button" title={`New score in ${d.path}`} aria-label={`New score in ${d.path}`} className="hover:underline" onClick={() => ops.newFile(d.path)}>+f</button>
-                <button type="button" title={`New subfolder in ${d.path}`} aria-label={`New subfolder in ${d.path}`} className="hover:underline" onClick={() => ops.newDir(d.path)}>+d</button>
-                <button type="button" title={`Rename ${d.path}`} aria-label={`Rename ${d.path}`} className="hover:underline" onClick={() => ops.rename(d.path)}>✎</button>
-                <button type="button" title={`Delete ${d.path}`} aria-label={`Delete ${d.path}`} className="text-destructive hover:underline" onClick={() => ops.remove(d.path, true)}>✕</button>
+              <span className="text-base">{d.name}/</span>
+              <span className="inline-flex gap-1 font-normal" onClick={(e) => e.preventDefault()}>
+                <button type="button" title={`New score in ${d.path}`} aria-label={`New score in ${d.path}`} className={touchBtn} onClick={() => ops.newFile(d.path)}>+f</button>
+                <button type="button" title={`New subfolder in ${d.path}`} aria-label={`New subfolder in ${d.path}`} className={touchBtn} onClick={() => ops.newDir(d.path)}>+d</button>
+                <button type="button" title={`Rename ${d.path}`} aria-label={`Rename ${d.path}`} className={touchBtn} onClick={() => ops.rename(d.path)}>✎</button>
+                <button type="button" title={`Delete ${d.path}`} aria-label={`Delete ${d.path}`} className={`${touchBtn} text-destructive`} onClick={() => ops.remove(d.path, true)}>✕</button>
               </span>
             </span>
           </summary>
-          <div className="pl-4">
+          <div className="pl-3 md:pl-4">
             <TreeFiles node={d} depth={depth + 1} selected={selected} onOpen={onOpen} ops={ops} />
           </div>
         </details>
       ))}
       {node.files.map((f: any) => (
-        <span key={f.path} className="flex items-center gap-1">
-          <button type="button" className={`block w-full text-left py-0.5 hover:underline cursor-pointer ${f.path === selected ? 'font-semibold text-primary' : ''}`} onClick={() => onOpen(f.path)}>{f.name}</button>
-          <button type="button" title={`Rename ${f.path}`} aria-label={`Rename ${f.path}`} className="text-xs hover:underline shrink-0" onClick={() => ops.rename(f.path)}>✎</button>
-          <button type="button" title={`Delete ${f.path}`} aria-label={`Delete ${f.path}`} className="text-xs text-destructive hover:underline shrink-0" onClick={() => ops.remove(f.path, false)}>✕</button>
+        <span key={f.path} className="flex items-center gap-1 rounded-md hover:bg-accent pr-1">
+          <button type="button" className={`min-h-[44px] flex-1 text-left px-2 text-base hover:underline cursor-pointer ${f.path === selected ? 'font-semibold text-primary' : ''}`} onClick={() => onOpen(f.path)}>{f.name}</button>
+          <button type="button" title={`Rename ${f.path}`} aria-label={`Rename ${f.path}`} className={`${touchBtn} text-muted-foreground`} onClick={() => ops.rename(f.path)}>✎</button>
+          <button type="button" title={`Delete ${f.path}`} aria-label={`Delete ${f.path}`} className={`${touchBtn} text-destructive`} onClick={() => ops.remove(f.path, false)}>✕</button>
         </span>
       ))}
     </>
@@ -627,10 +629,10 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
           <p className="text-xs text-muted-foreground">{version}</p>
         </div>
         <div className="header-actions flex items-center gap-3">
-          <label className="text-sm flex items-center gap-1">
-            <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> auto-preview
+          <label className="text-sm flex items-center gap-2 min-h-[44px]">
+            <input type="checkbox" className="size-5" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> auto-preview
           </label>
-          <button type="button" className="text-xs rounded border px-2 py-1" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle light/dark mode">
+          <button type="button" className="text-sm rounded border px-3 min-h-[44px]" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle light/dark mode">
             {theme === 'dark' ? '☾ Dark' : '☀ Light'}
           </button>
           <span className={`px-3 py-1 rounded-full text-xs font-semibold ${status.state === 'err' ? 'bg-destructive/10 text-destructive' : status.state === 'busy' ? 'bg-yellow-500/10 text-yellow-600' : 'bg-green-500/10 text-green-600'}`} aria-live="polite">{status.text}</span>
@@ -651,9 +653,9 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
               <option value="voice">Voice</option>
               <option value="polyphony">Polyphony</option>
             </select>
-            <Button id="newBtn" variant="outline" size="sm" onClick={onScaffold}>+ New</Button>
-            <Button id="saveBtn" variant="outline" size="sm" onClick={onSave}>Save</Button>
-            <Button id="compileBtn" size="sm" onClick={() => runCompile()}>Compile ▶</Button>
+            <Button id="newBtn" variant="outline" onClick={onScaffold}>+ New</Button>
+            <Button id="saveBtn" variant="outline" onClick={onSave}>Save</Button>
+            <Button id="compileBtn" onClick={() => runCompile()}>Compile ▶</Button>
           </div>
 
           <details id="dirPanel" className="border rounded mb-2" open>
@@ -673,7 +675,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
                       <option key={p.name} value={p.name}>{p.name} ({p.files.length} files)</option>
                     ))}
                   </select>
-                  <Button size="sm" variant="outline" disabled={!presetChoice || presetLoading} onClick={() => onPresetUse(presetChoice)}>
+                  <Button variant="outline" disabled={!presetChoice || presetLoading} onClick={() => onPresetUse(presetChoice)}>
                     {presetLoading ? 'Loading…' : 'Use'}
                   </Button>
                 </div>
@@ -682,13 +684,13 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
                 <h3 className="text-xs uppercase text-muted-foreground mb-2">
                   Workspace
                   <span className="normal-case">
-                    {' '}<button type="button" title="New score in workspace root" className="underline" onClick={() => onEntryNewFile('')}>+file</button>
-                    {' '}<button type="button" title="New folder in workspace root" className="underline" onClick={() => onEntryNewDir('')}>+folder</button>
+                    {' '}<button type="button" title="New score in workspace root" className="inline-flex items-center min-h-[44px] px-2 underline" onClick={() => onEntryNewFile('')}>+file</button>
+                    {' '}<button type="button" title="New folder in workspace root" className="inline-flex items-center min-h-[44px] px-2 underline" onClick={() => onEntryNewDir('')}>+folder</button>
                   </span>
                 </h3>
-                <div id="workspaceTree" className="text-sm max-h-64 overflow-auto">
+                <div id="workspaceTree" className="text-base max-h-96 overflow-auto">
                   {tree && (tree.dirs.length > 0 || tree.files.length > 0) ? (
-                    <ul className="space-y-0.5">
+                    <ul className="space-y-1">
                       <TreeFiles node={tree} depth={0} selected={selected} onOpen={loadFile} ops={entryOps} />
                     </ul>
                   ) : (
@@ -706,7 +708,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
                 {band.wrapperMissing && (
                   <div className="p-2 border rounded bg-yellow-50 text-xs">
                     full-band.ly is missing — the song cannot compile as a whole.
-                    <Button size="sm" variant="outline" className="ml-2" onClick={onRebuild}>Rebuild wrapper</Button>
+                    <Button variant="outline" className="ml-2" onClick={onRebuild}>Rebuild wrapper</Button>
                   </div>
                 )}
                 {band.drift && (band.drift.missing.length > 0 || band.drift.unlisted.length > 0) && (
@@ -714,7 +716,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
                     <div><strong>Wrapper drift:</strong></div>
                     {band.drift.missing.length > 0 && <div>included but gone: {band.drift.missing.join(', ')}</div>}
                     {band.drift.unlisted.length > 0 && <div>on disk, never included: {band.drift.unlisted.join(', ')}</div>}
-                    <Button size="sm" variant="outline" onClick={onRestitch}>Restitch now</Button>
+                    <Button variant="outline" onClick={onRestitch}>Restitch now</Button>
                   </div>
                 )}
                 {(band.globalsIssues?.length > 0 || band.chordKeyWarn?.length > 0) && (
@@ -726,25 +728,25 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
                 <div>
                   <h3 className="text-xs uppercase text-muted-foreground mb-1">Sections</h3>                  <div className="flex flex-wrap gap-1 mb-2">
                     {band.sections.map((s: any) => (
-                      <span key={s.name} className="inline-flex items-center gap-1 border rounded px-2 py-0.5">
+                      <span key={s.name} className="inline-flex items-center gap-1 border rounded-md px-2 py-1 text-base">
                         {s.name}
                         {s.hasGlobals && <span title="Per-section setup override active (sections/<section>/globals.ily)">⚙</span>}
-                        <button type="button" aria-label={`Delete section ${s.name}`} title={`Delete section ${s.name}`} disabled={band.sections.length <= 1} className="text-destructive hover:underline disabled:opacity-30" onClick={() => onDelSection(s.name)}>✕</button>
+                        <button type="button" aria-label={`Delete section ${s.name}`} title={`Delete section ${s.name}`} disabled={band.sections.length <= 1} className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-md text-lg text-destructive hover:bg-accent disabled:opacity-30" onClick={() => onDelSection(s.name)}>✕</button>
                       </span>
                     ))}
                   </div>
                   <div className="flex gap-1">
                     <input id="newSection" className="border rounded px-2 py-1 text-sm flex-1 min-w-0" placeholder="new section (e.g. bridge)" value={newSection} onChange={(e) => setNewSection(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') onAddSection() }} />
-                    <Button size="sm" variant="outline" onClick={onAddSection}>+ Section</Button>
+                    <Button variant="outline" onClick={onAddSection}>+ Section</Button>
                   </div>
                 </div>
                 <div>
                   <h3 className="text-xs uppercase text-muted-foreground mb-1">Instruments</h3>
                   <div className="flex flex-wrap gap-1 mb-2">
                     {band.tokens.map((t: string) => (
-                      <span key={t} className="inline-flex items-center gap-1 border rounded px-2 py-0.5">
+                      <span key={t} className="inline-flex items-center gap-1 border rounded-md px-2 py-1 text-base">
                         {t}
-                        <button type="button" aria-label={`Delete instrument ${t}`} title={`Delete instrument ${t}`} className="text-destructive hover:underline" onClick={() => onDelToken(t)}>✕</button>
+                        <button type="button" aria-label={`Delete instrument ${t}`} title={`Delete instrument ${t}`} className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-md text-lg text-destructive hover:bg-accent" onClick={() => onDelToken(t)}>✕</button>
                       </span>
                     ))}
                   </div>
@@ -759,11 +761,11 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
                       <option value="alto">alto</option>
                       <option value="tenor">tenor</option>
                     </select>
-                    <Button size="sm" variant="outline" onClick={onAddToken}>+ Instrument</Button>
+                    <Button variant="outline" onClick={onAddToken}>+ Instrument</Button>
                   </div>
                 </div>
                 <div className="flex gap-1 pt-1">
-                  <Button size="sm" variant="outline" title="Re-derive includes, stitches, and setup prefixes from the files on disk" onClick={onRestitch}>Restitch wrapper</Button>
+                  <Button variant="outline" title="Re-derive includes, stitches, and setup prefixes from the files on disk" onClick={onRestitch}>Restitch wrapper</Button>
                 </div>
               </div>
             </details>
@@ -792,9 +794,9 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
 
           <p className="text-xs text-muted-foreground mt-1">Tip: also edit <code>workspace/*.ly</code> — the server watches, recompiles on save, and pushes the result.</p>
 
-          <div className="flex items-center gap-4 mt-2 text-sm">
-            <label><input id="follow" type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> follow file (auto-reload)</label>
-            <label><input id="autoplay" type="checkbox" checked={autoplay} onChange={(e) => setAutoplay(e.target.checked)} /> auto-play MIDI on save</label>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm">
+            <label className="inline-flex items-center gap-2 min-h-[44px]"><input id="follow" type="checkbox" className="size-5" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> follow file (auto-reload)</label>
+            <label className="inline-flex items-center gap-2 min-h-[44px]"><input id="autoplay" type="checkbox" className="size-5" checked={autoplay} onChange={(e) => setAutoplay(e.target.checked)} /> auto-play MIDI on save</label>
           </div>
           {followNotice && <div id="watchNotice" className="mt-2 p-2 border rounded bg-yellow-50 text-sm">{followNotice}</div>}
         </section>
@@ -831,7 +833,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
           )}
           <nav className="flex items-center gap-2 mb-2">
             {([['png', 'PNG'], ['pdf', 'PDF'], ['midi', 'MIDI'], ['both', 'PNG+MIDI']] as const).map(([t, label]) => (
-              <Button key={t} size="sm" variant={tab === t ? 'default' : 'outline'} onClick={() => setTab(t)}>{label}</Button>
+              <Button key={t} variant={tab === t ? 'default' : 'outline'} className="min-h-[44px]" onClick={() => setTab(t)}>{label}</Button>
             ))}
             {stale && <Badge className="bg-secondary text-secondary-foreground">showing last good version</Badge>}
           </nav>
@@ -839,7 +841,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
           {(tab === 'png' || tab === 'both') && (
             <div className="mb-4">
               <div className="flex items-center gap-3 mb-2 text-sm">
-                <a id="dlPng" href={pngUrls[0] ?? '#'} className="text-primary underline" download="preview.png">Download PNG</a>
+                <a id="dlPng" href={pngUrls[0] ?? '#'} className="text-primary underline inline-flex items-center min-h-[44px]" download="preview.png">Download PNG</a>
                 <label>Score opacity <input id="pngOp" type="range" min={0} max={1} step={0.01} value={pngOpacity} onChange={(e) => setPngOpacity(Number(e.target.value))} /></label>
               </div>
               <div id="pngWrap" className="border rounded p-2 overflow-auto bg-card" style={{ opacity: pngOpacity }}>
@@ -851,7 +853,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
           {tab === 'pdf' && (
             <div>
               <div className="flex items-center gap-3 mb-2 text-sm">
-                <a id="dlPdf" href={pdfUrl ?? '#'} className="text-primary underline" download="preview.pdf">Download PDF</a>
+                <a id="dlPdf" href={pdfUrl ?? '#'} className="text-primary underline inline-flex items-center min-h-[44px]" download="preview.pdf">Download PDF</a>
                 <label>PDF opacity <input id="pdfOp" type="range" min={0} max={1} step={0.01} value={pdfOpacity} onChange={(e) => setPdfOpacity(Number(e.target.value))} /></label>
               </div>
               <iframe id="pdfFrame" title="PDF preview" className="w-full h-[50vh] lg:h-[70vh] border rounded" src={pdfUrl ?? undefined} style={{ opacity: pdfOpacity }} />
@@ -861,8 +863,8 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
           {(tab === 'midi' || tab === 'both') && (
             <div>
               <div className="flex flex-wrap items-center gap-3 mb-2 text-sm">
-                <a id="dlMidi" href={midiUrl ?? '#'} className="text-primary underline" download="preview.midi">Download MIDI</a>
-                <button id="sf2UploadBtn" className="underline">Upload soundfont</button>
+                <a id="dlMidi" href={midiUrl ?? '#'} className="text-primary underline inline-flex items-center min-h-[44px]" download="preview.midi">Download MIDI</a>
+                <button id="sf2UploadBtn" className="underline inline-flex items-center min-h-[44px]">Upload soundfont</button>
                 <input id="sf2UploadFile" type="file" accept=".sf2,.sf3,.dls,.sfogg" hidden />
                 <label>Engine <select id="engineSelect" className="border rounded px-1"><option value="magenta">Magenta</option><option value="basic">Basic (offline)</option><option value="sf2">SF2</option></select></label>
                 <label id="magentaSfWrap">Sound <select id="sfSelect" className="border rounded px-1"><option value="sgm">General MIDI</option><option value="salamander">Salamander</option><option value="jazz">Jazz Kit</option><option value="synth">Synth</option></select></label>
@@ -871,10 +873,10 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
               <div id="mixerBox" hidden>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-sm">Section</span>
-                  <Button size="sm" data-section="full">Full</Button>
-                  <Button size="sm" data-section="verse">Verse</Button>
-                  <Button size="sm" data-section="chorus">Chorus</Button>
-                  <label className="text-sm"><input id="loopBox" type="checkbox" /> loop</label>
+                  <Button data-section="full">Full</Button>
+                  <Button data-section="verse">Verse</Button>
+                  <Button data-section="chorus">Chorus</Button>
+                  <label className="text-sm inline-flex items-center gap-2 min-h-[44px]"><input id="loopBox" type="checkbox" className="size-5" /> loop</label>
                   <span id="sectionTimes" className="text-xs font-mono" />
                 </div>
                 <div id="mixerRows" />
@@ -886,25 +888,25 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
               </div>
               <div id="basicBox" hidden>
                 <div className="flex items-center gap-2 mb-2">
-                  <Button id="basicPlay" size="sm">Play</Button>
-                  <Button id="basicStop" variant="outline" size="sm">Stop</Button>
+                  <Button id="basicPlay">Play</Button>
+                  <Button id="basicStop" variant="outline">Stop</Button>
                   <span id="basicTime" className="text-xs font-mono">0:00 / 0:00</span>
                 </div>
                 <p className="text-xs text-muted-foreground">Built-in synth — no network needed, plain GM-style tones.</p>
               </div>
               <div id="sf2Box" hidden>
                 <div className="flex items-center gap-2 mb-2">
-                  <Button id="sf2Play" size="sm">Play</Button>
-                  <Button id="sf2Pause" variant="outline" size="sm">Pause</Button>
-                  <Button id="sf2Stop" variant="outline" size="sm">Stop</Button>
-                  <input id="sf2Seek" type="range" min={0} max={1000} value={0} className="flex-1" />
+                  <Button id="sf2Play">Play</Button>
+                  <Button id="sf2Pause" variant="outline">Pause</Button>
+                  <Button id="sf2Stop" variant="outline">Stop</Button>
+                  <input id="sf2Seek" type="range" min={0} max={1000} value={0} className="flex-1 min-h-[44px]" />
                   <span id="sf2Time" className="text-xs font-mono">0:00 / 0:00</span>
                 </div>
                 <div className="text-sm mb-2">
                   <input id="sf2File" type="file" accept=".sf2,.sf3,.dls,.sfogg" hidden />
                   <input id="sf2Url" type="url" placeholder="https://…/bank.sf2 or .sf3" hidden />
-                  <Button id="sf2LoadBtn" variant="outline" size="sm" hidden>Load bank</Button>
-                  <Button id="sf2DeleteBtn" variant="outline" size="sm" hidden>Delete saved bank</Button>
+                  <Button id="sf2LoadBtn" variant="outline" hidden>Load bank</Button>
+                  <Button id="sf2DeleteBtn" variant="outline" hidden>Delete saved bank</Button>
                 </div>
                 <p id="sf2Status" className="text-sm text-muted-foreground">SF2 engine idle.</p>
               </div>
