@@ -78,7 +78,7 @@ export default function App() {
   const [follow, setFollow] = usePersistentState('lily:follow', true)
   const [autoplay, setAutoplay] = usePersistentState('lily:autoplay', true)
   const [followNotice, setFollowNotice] = useState('')
-  const [tab, setTab] = usePersistentState<'png' | 'pdf' | 'midi'>('lily:tab', 'png')
+  const [tab, setTab] = usePersistentState<'png' | 'pdf' | 'midi' | 'both'>('lily:tab', 'png')
   const [errorLines, setErrorLines] = useState<string[]>([])
   const [hasGood, setHasGood] = useState(false)
   const [stale, setStale] = useState(false)
@@ -251,7 +251,7 @@ export default function App() {
   useEffect(() => {
     const M = (window as any).MIDI
     M?.bind?.()
-    if (tab === 'midi' && midiUrl) M?.load?.(midiUrl, { autoplay: false })
+    if ((tab === 'midi' || tab === 'both') && midiUrl) M?.load?.(midiUrl, { autoplay: false })
   }, [tab, midiUrl])
 
   useEffect(() => {
@@ -562,6 +562,29 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
     if (selected.startsWith(`${proj}/sections/`) && selected.endsWith(`/${t}.ily`)) loadFile(`${proj}/full-band.ly`)
   }
 
+  const onRestitch = () => {
+    const proj = bandProjectOf(selected)
+    if (!proj) return
+    bandMutate('/api/band/restitch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: proj }),
+    }, 'wrapper restitched').then(() => {
+      if (selected.endsWith('full-band.ly')) loadFile(selected)
+    })
+  }
+
+  const onRebuild = () => {
+    const proj = bandProjectOf(selected)
+    if (!proj) return
+    if (!window.confirm(`Rebuild ${proj}/full-band.ly from the files on disk? Staff labels become family defaults — check the score before performing it.`)) return
+    bandMutate('/api/band/rebuild', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: proj }),
+    }, 'wrapper rebuilt').then(() => loadFile(`${proj}/full-band.ly`))
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Floating toolbar: drag by the grip, position persists. */}
@@ -680,12 +703,32 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
             <details id="bandPanel" className="border rounded mb-2">
               <summary className="p-2 font-semibold cursor-pointer">Sections &amp; instruments <span className="text-xs font-normal text-muted-foreground">({band.project})</span></summary>
               <div className="p-3 border-t space-y-3 text-sm">
+                {band.wrapperMissing && (
+                  <div className="p-2 border rounded bg-yellow-50 text-xs">
+                    full-band.ly is missing — the song cannot compile as a whole.
+                    <Button size="sm" variant="outline" className="ml-2" onClick={onRebuild}>Rebuild wrapper</Button>
+                  </div>
+                )}
+                {band.drift && (band.drift.missing.length > 0 || band.drift.unlisted.length > 0) && (
+                  <div className="p-2 border rounded bg-yellow-50 text-xs space-y-1">
+                    <div><strong>Wrapper drift:</strong></div>
+                    {band.drift.missing.length > 0 && <div>included but gone: {band.drift.missing.join(', ')}</div>}
+                    {band.drift.unlisted.length > 0 && <div>on disk, never included: {band.drift.unlisted.join(', ')}</div>}
+                    <Button size="sm" variant="outline" onClick={onRestitch}>Restitch now</Button>
+                  </div>
+                )}
+                {(band.globalsIssues?.length > 0 || band.chordKeyWarn?.length > 0) && (
+                  <div className="p-2 border rounded bg-yellow-50 text-xs space-y-1">
+                    {band.globalsIssues?.map((g: string) => <div key={g}>{g}</div>)}
+                    {band.chordKeyWarn?.length > 0 && <div>A <code>\key</code> override in {band.chordKeyWarn.join(', ')} does not reach the ChordNames context — chord names keep the old key.</div>}
+                  </div>
+                )}
                 <div>
-                  <h3 className="text-xs uppercase text-muted-foreground mb-1">Sections</h3>
-                  <div className="flex flex-wrap gap-1 mb-2">
+                  <h3 className="text-xs uppercase text-muted-foreground mb-1">Sections</h3>                  <div className="flex flex-wrap gap-1 mb-2">
                     {band.sections.map((s: any) => (
                       <span key={s.name} className="inline-flex items-center gap-1 border rounded px-2 py-0.5">
                         {s.name}
+                        {s.hasGlobals && <span title="Per-section setup override active (sections/<section>/globals.ily)">⚙</span>}
                         <button type="button" aria-label={`Delete section ${s.name}`} title={`Delete section ${s.name}`} disabled={band.sections.length <= 1} className="text-destructive hover:underline disabled:opacity-30" onClick={() => onDelSection(s.name)}>✕</button>
                       </span>
                     ))}
@@ -718,6 +761,9 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
                     </select>
                     <Button size="sm" variant="outline" onClick={onAddToken}>+ Instrument</Button>
                   </div>
+                </div>
+                <div className="flex gap-1 pt-1">
+                  <Button size="sm" variant="outline" title="Re-derive includes, stitches, and setup prefixes from the files on disk" onClick={onRestitch}>Restitch wrapper</Button>
                 </div>
               </div>
             </details>
@@ -784,14 +830,14 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
             </div>
           )}
           <nav className="flex items-center gap-2 mb-2">
-            {(['png', 'pdf', 'midi'] as const).map((t) => (
-              <Button key={t} size="sm" variant={tab === t ? 'default' : 'outline'} onClick={() => setTab(t)}>{t.toUpperCase()}</Button>
+            {([['png', 'PNG'], ['pdf', 'PDF'], ['midi', 'MIDI'], ['both', 'PNG+MIDI']] as const).map(([t, label]) => (
+              <Button key={t} size="sm" variant={tab === t ? 'default' : 'outline'} onClick={() => setTab(t)}>{label}</Button>
             ))}
             {stale && <Badge className="bg-secondary text-secondary-foreground">showing last good version</Badge>}
           </nav>
 
-          {tab === 'png' && (
-            <div>
+          {(tab === 'png' || tab === 'both') && (
+            <div className="mb-4">
               <div className="flex items-center gap-3 mb-2 text-sm">
                 <a id="dlPng" href={pngUrls[0] ?? '#'} className="text-primary underline" download="preview.png">Download PNG</a>
                 <label>Score opacity <input id="pngOp" type="range" min={0} max={1} step={0.01} value={pngOpacity} onChange={(e) => setPngOpacity(Number(e.target.value))} /></label>
@@ -812,7 +858,7 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
             </div>
           )}
 
-          {tab === 'midi' && (
+          {(tab === 'midi' || tab === 'both') && (
             <div>
               <div className="flex flex-wrap items-center gap-3 mb-2 text-sm">
                 <a id="dlMidi" href={midiUrl ?? '#'} className="text-primary underline" download="preview.midi">Download MIDI</a>

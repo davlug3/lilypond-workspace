@@ -17,6 +17,7 @@
 \include "sections/verse/vocals.ily"
 \include "sections/verse/backing.ily"
 \include "sections/verse/rhythm.ily"
+\include "sections/chorus/globals.ily"
 \include "sections/chorus/guitar.ily"
 \include "sections/chorus/keys.ily"
 \include "sections/chorus/drums.ily"
@@ -26,17 +27,18 @@
 \include "sections/chorus/rhythm.ily"
 
 % Stitched variables: full-band view = verse + chorus.
-leadFull = { \leadVerse \leadChorus }
+% Setup overrides: chorus.
+guitarFull = { \global \guitarVerse \globalsChorus \guitarChorus }
+pianoFullRH = { \global \pianoVerseRH \globalsChorus \pianoChorusRH }
+pianoFullLH = { \global \pianoVerseLH \globalsChorus \pianoChorusLH }
+drumFullHands = { \drumGlobal \drumVerseHands \globalsChorus \drumChorusHands }
+drumFullFeet = { \drumGlobal \drumVerseFeet \globalsChorus \drumChorusFeet }
+bassFull = { \global \bassVerse \globalsChorus \bassChorus }
+leadFull = { \global \leadVerse \globalsChorus \leadChorus }
 leadWordsFull = \lyricmode { \leadWordsVerse \leadWordsChorus }
-backingFull = { \backingVerse \backingChorus }
+backingFull = { \global \backingVerse \globalsChorus \backingChorus }
 backingWordsFull = \lyricmode { \backingWordsVerse \backingWordsChorus }
-pianoFullRH = { \pianoVerseRH \pianoChorusRH }
-pianoFullLH = { \pianoVerseLH \pianoChorusLH }
-guitarFull = { \guitarVerse \guitarChorus }
-rhythmFull = { \rhythmVerse \rhythmChorus }
-bassFull = { \bassVerse \bassChorus }
-drumFullHands = { \drumVerseHands \drumChorusHands }
-drumFullFeet = { \drumVerseFeet \drumChorusFeet }
+rhythmFull = { \global \rhythmVerse \globalsChorus \rhythmChorus }
 
 #(set-global-staff-size 15)
 
@@ -60,10 +62,8 @@ drumFullFeet = { \drumVerseFeet \drumChorusFeet }
       midiInstrument = "voice oohs"
     } {
       \new Voice = "lead" {
-        \leadVerseA \break
-        \leadVerseB \break
-        \leadChorusA \break
-        \leadChorusB
+        \global \leadVerseA \break \leadVerseB \break
+        \globalsChorus \leadChorusA \break \leadChorusB
       }
     }
     \new Lyrics \lyricsto "lead" \leadWordsFull

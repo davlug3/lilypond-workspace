@@ -2,7 +2,6 @@
 % full-band.ly includes this plus sections/chorus/keys.ily.
 
 pianoVerseARH = \relative c' {
-  \global
   \clef treble
   \mark "Verse"
   e8\p g b g e8 g b g |            % bar 1 Em
@@ -12,7 +11,6 @@ pianoVerseARH = \relative c' {
 }
 
 pianoVerseBRH = \relative c' {
-  \global
   \clef treble
   e8 g b g e8 g b g |              % bar 5 Em
   e8 g b g a8 b c b |              % bar 6 climbs into C
@@ -21,7 +19,6 @@ pianoVerseBRH = \relative c' {
 }
 
 pianoVerseLH = \relative c {
-  \global
   \clef bass
   \mark "Verse"
   e2\p b8 b e4 |                   % bar 1 (B = 5th)

@@ -2,7 +2,6 @@
 % full-band.ly includes this plus sections/verse/keys.ily.
 
 pianoChorusRH = \relative c' {
-  \global
   \clef treble
   \mark "Chorus"
   <g' b d>4\f <g b d> <g b d>8 <g b d> <g b d>4 |   % bar 9 G
@@ -16,7 +15,6 @@ pianoChorusRH = \relative c' {
 }
 
 pianoChorusLH = \relative c {
-  \global
   \clef bass
   \mark "Chorus"
   g4\f g g g |                     % bar 9

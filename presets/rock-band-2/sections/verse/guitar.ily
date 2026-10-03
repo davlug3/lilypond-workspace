@@ -2,7 +2,6 @@
 % full-band.ly includes this plus sections/chorus/guitar.ily.
 
 guitarVerse = \relative c' {
-  \global
   R1 |                               % bar 1 lays out
   r2 r4\mp e8 g8 |                   % bar 2 answer
   R1 |                               % bar 3 lays out

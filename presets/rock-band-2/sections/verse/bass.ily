@@ -2,7 +2,6 @@
 % full-band.ly includes this plus sections/chorus/bass.ily.
 
 bassVerse = \relative c {
-  \global
   \clef bass
   \mark "Verse"
   e4\p r4 r8 e8 r4 |                   % bar 1 Em

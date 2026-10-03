@@ -2,7 +2,6 @@
 % full-band.ly includes this plus sections/verse/guitar.ily.
 
 guitarChorus = \relative c' {
-  \global
   g''4\f g8 g g4 g4 |               % bar 9 G5 riff
   a4 a8 a a4 a4 |                   % bar 10 riff on A (5th of D)
   b4 b8 b b4 b4 |                   % bar 11 riff on B (5th of Em)

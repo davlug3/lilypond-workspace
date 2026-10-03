@@ -233,6 +233,35 @@ cd client && npx eslint src --max-warnings 0
   left vocal/backing Lyrics lines dangling.
   Note: `workspace/<project>` copies are snapshots — preset updates don't
   propagate; delete the workspace copy and re-Use the preset to refresh.
+- Wrapper self-heal (in progress): `bandStructure()` reports include drift
+  (`drift: { missing, unlisted }`), `bandReconcile()` restitches includes /
+  stitches / lead voice from disk, prunes staves of fully-deleted instruments
+  (`bandPruneOrphanTokens`), adds staves for hand-added tokens
+  (`bandEnsureTokenStaves`), and rewrites section-scoped variables after tree
+  moves (`bandFixMovedVars`). Tree CRUD (`/api/folder`, `/api/move`,
+  `/api/entry`) and the file-watch auto-compile path reconcile the owning
+  project; `POST /api/band/restitch` reconciles on demand,
+  `POST /api/band/rebuild` synthesizes a fresh `full-band.ly` when deleted.
+  Section/token names inside `sections/` are letters-only (digits would break
+  LilyPond variable references — refused at the tree boundary).
+- Per-section setup overrides: `sections/<section>/globals.ily` optionally
+  defines `globals<Section>` (self-contained key/time/tempo; shipped example
+  in `sections/chorus/globals.ily` mirrors shared defaults). The wrapper
+  emits it in place of `\global` / `\drumGlobal` before that section's music
+  in every stitched voice (lyrics excluded); reconcile strips redundant
+  file-local `\global` lines (reports `stripped`, keeps inline uses).
+  Wrong variable names are reported (`globalsIssues`), `\key` overrides warn
+  (`chordKeyWarn` — ChordNames is staff-local). Verified: migration keeps the
+  MIDI note stream identical (2046 events), tempo/key/override restitches
+  compile with 0 errors, section renames carry the override, deleting the
+  override falls back to `\global`, solo render prefixes setup per section.
+- PNG+MIDI tab + cropped PNGs: preview tabs are PNG / PDF / MIDI / PNG+MIDI
+  (score above player; same mounted panels, so tab switches never cut audio).
+  `compileLilypond` trims every PNG to the music bounding box via a pure-Node
+  PNG crop (`trimPngMargins`: 8-bit gray/RGB/RGBA, corner-sampled background,
+  6px pad; anything else returns the original). Full-band page 835x1181 →
+  ~730x963, note stream untouched. Debugged a missing final CRC XOR
+  (`cbf43926` test vector) that strict decoders rejected.
 
 ## Contact / context
 

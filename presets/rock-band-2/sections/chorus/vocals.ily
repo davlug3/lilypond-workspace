@@ -2,7 +2,6 @@
 % full-band.ly includes this plus sections/verse/vocals.ily.
 
 leadChorusA = \relative c' {
-  \global
   \clef treble
   \mark "Chorus"
   d'4\f d e8 g g4 |             % bar 9 hook (5)
@@ -12,7 +11,6 @@ leadChorusA = \relative c' {
 }
 
 leadChorusB = \relative c' {
-  \global
   \clef treble
   b''2 r2 |                     % bar 13 STOP, voice alone (1)
   a4 g a8 b c4 |                % bar 14 (5)

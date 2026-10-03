@@ -2,7 +2,6 @@
 % full-band.ly includes this plus sections/chorus/backing.ily.
 
 backingVerse = \relative c' {
-  \global
   \clef treble
   \mark "Verse"
   e1\p |                        % bar 1 ooh

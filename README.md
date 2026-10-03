@@ -29,6 +29,18 @@ Requires `lilypond` on PATH (you have 2.22.2). Check: `lilypond --version`.
     token files, restitch `full-band.ly` includes + `<x>Full` variables + lead
     voice, and add/remove the score staff (custom staves are tagged
     `% token:<name> (managed)`). Deleting the last section is refused.
+    `globals` is reserved: `sections/<section>/globals.ily` optionally defines
+    `globals<Section>` (self-contained key/time/tempo), which the wrapper emits
+    in place of `\global` (pitched) / `\drumGlobal` (drums) before that
+    section's music in every stitched voice. Reconcile strips redundant
+    file-local `\global` lines (the wrapper supplies setup) and reports them
+    as `stripped`; a `globals.ily` with the wrong variable name is reported
+    in `globalsIssues` and ignored. A `\key` override does not reach the
+    `ChordNames` context — reported as `chordKeyWarn`.
+    `POST /api/band/restitch { project }` re-derives the wrapper from disk
+    (also heals out-of-app edits via the auto-compile path);
+    `POST /api/band/rebuild { project }` synthesizes a fresh `full-band.ly`
+    when it was deleted.
   - Opening a section file (`sections/<section>/<token>.ily`) renders only
     that section: `POST /api/band/render { project, section, token }`
     synthesizes a family-correct wrapper (PianoStaff/DrumStaff/Staff+Tab/
@@ -46,7 +58,10 @@ Requires `lilypond` on PATH (you have 2.22.2). Check: `lilypond --version`.
 - `public/index.html|app.js|sf2-player.js|style.css` — editor + preview UI:
   - textarea editor, debounced (800 ms) auto-compile when `auto-preview` is on.
   - Tabs: **PNG score** (`<img>`), **PDF** (`<iframe>`), **MIDI audio**
-    (`<midi-player>` + `<midi-visualizer>` from `html-midi-player`, Tone.js soundfont — no server audio conversion needed).
+    (`<midi-player>` + `<midi-visualizer>` from `html-midi-player`, Tone.js soundfont — no server audio conversion needed),
+    and **PNG+MIDI** (cropped score above the player, for read-while-listening).
+    Preview PNGs are cropped server-side to the music extents (dependency-free
+    trim in `server.js`; falls back to full page on any parse failure).
     The selected tab is remembered in the URL hash (`#png` / `#pdf` / `#midi`),
     so it survives reloads and can be shared/bookmarked.
   - **Resizable panels**: drag the divider between editor and preview (15–85%

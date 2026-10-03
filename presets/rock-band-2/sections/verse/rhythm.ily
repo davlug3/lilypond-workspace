@@ -2,7 +2,6 @@
 % full-band.ly includes this plus sections/chorus/rhythm.ily.
 
 rhythmVerse = \relative c' {
-  \global
   R1 |                               % bar 1 tacet
   R1 |                               % bar 2 tacet
   c8\mp^"P.M." c c c c8 c c c |      % bar 3 C chug
