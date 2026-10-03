@@ -255,6 +255,17 @@ cd client && npx eslint src --max-warnings 0
   MIDI note stream identical (2046 events), tempo/key/override restitches
   compile with 0 errors, section renames carry the override, deleting the
   override falls back to `\global`, solo render prefixes setup per section.
+- Mobile editor taps: force the classic textarea input path on touch devices
+  (`editContext: !touchInput`). Monaco 0.57 defaults to native EditContext on
+  Chromium, where tap-to-place-cursor is the browser's job and unreliable;
+  the textarea path handles taps via Monaco's own Gesture Tap -> moveTo
+  (verified in `pointerHandler.js`/`touch.js`). Desktop keeps native.
+  Follow-up (Chrome Android, no TalkBack: single tap focuses but cursor stays):
+  added a capture-phase tap backstop in `App.tsx` (`attachTapBackstop`) that
+  hit-tests via public `getTargetAtClientPoint` and calls setPosition+focus
+  for content-area taps only — independent of Monaco's gesture pipeline.
+  Mock-verified (tap places, gutter/swipe ignored, re-attach guarded).
+  `tsc` + `vite build` green; on-device tap check still needed.
 - PNG+MIDI tab + cropped PNGs: preview tabs are PNG / PDF / MIDI / PNG+MIDI
   (score above player; same mounted panels, so tab switches never cut audio).
   `compileLilypond` trims every PNG to the music bounding box via a pure-Node

@@ -18,6 +18,44 @@ type EntryOps = {
   remove: (path: string, isDir: boolean) => void
 }
 
+// Mobile tap-to-place-cursor backstop. Monaco's own gesture pipeline can
+// silently drop taps on some mobile browsers (the editor focuses but the
+// cursor never moves), so hit-test the tap with Monaco's public API and
+// place the cursor explicitly. Capture-phase, tap-shaped only (quick single
+// touch, minimal movement): scrolling, pinch-zoom and long-press are
+// untouched, and setting the same position twice when Monaco also handles
+// the tap is harmless. Never preventDefault: no interference with Monaco.
+function attachTapBackstop(editor: any, monaco: any) {
+  const node = editor.getDomNode?.()
+  if (!node || node.dataset.tapBackstop) return
+  node.dataset.tapBackstop = '1'
+  let start: { id: number; x: number; y: number; t: number } | null = null
+  node.addEventListener('touchstart', (e: TouchEvent) => {
+    if (e.touches.length === 1) {
+      const t = e.touches[0]
+      start = { id: t.identifier, x: t.clientX, y: t.clientY, t: Date.now() }
+    } else {
+      start = null
+    }
+  }, { capture: true, passive: true })
+  node.addEventListener('touchend', (e: TouchEvent) => {
+    const s = start
+    start = null
+    if (!s || e.changedTouches.length !== 1) return
+    const t = e.changedTouches[0]
+    if (t.identifier !== s.id || Date.now() - s.t > 350) return
+    if (Math.abs(t.clientX - s.x) > 12 || Math.abs(t.clientY - s.y) > 12) return
+    try {
+      const target = editor.getTargetAtClientPoint(t.clientX, t.clientY)
+      const MTT = monaco?.editor?.MouseTargetType
+      if (!target?.position || !MTT) return
+      if (target.type !== MTT.CONTENT_TEXT && target.type !== MTT.CONTENT_EMPTY) return
+      editor.setPosition(target.position)
+      editor.focus()
+    } catch { /* never break typing on hit-test failure */ }
+  }, { capture: true })
+}
+
 function TreeFiles({ node, depth, selected, onOpen, ops }: { node: any; depth: number; selected: string; onOpen: (p: string) => void; ops: EntryOps }) {
   // 44px minimum touch targets; whole rows highlight on hover.
   const touchBtn = "inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-md text-lg hover:bg-accent shrink-0";
@@ -98,6 +136,12 @@ export default function App() {
   const [newClef, setNewClef] = usePersistentState('lily:newClef', 'treble')
   const [scaffoldKind, setScaffoldKind] = usePersistentState<'part' | 'staff' | 'instrument' | 'voice' | 'polyphony'>('lily:scaffoldKind', 'part')
   const { theme, setTheme } = useTheme()
+  // Native EditContext (Monaco default) leaves tap-to-place-cursor to the
+  // browser, which is unreliable on mobile Chromium: taps neither focus nor
+  // move the cursor. The classic textarea path handles taps via Monaco's own
+  // Gesture Tap -> moveTo, so force it on touch devices. Desktop keeps the
+  // native path.
+  const touchInput = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
   const monacoTheme = theme === 'dark' ? 'lilypond-dark' : theme === 'light' ? 'lilypond-light' : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'lilypond-dark' : 'lilypond-light')
   const [code, setCode] = useState('')
   const [split, setSplit] = usePersistentState('lily:split', 50)
@@ -780,10 +824,11 @@ const SCAFFOLD_TEMPLATES: Record<'part' | 'staff' | 'instrument' | 'voice' | 'po
                 registerLilypond(monaco)
                 if (editor.getModel()) monaco.editor.setModelLanguage(editor.getModel(), 'lilypond')
                 monaco.editor.setTheme(monacoTheme)
+                attachTapBackstop(editor, monaco)
               }}
               value={code}
               onChange={(value) => setCode(value ?? '')}
-              options={{ minimap: { enabled: false }, fontSize: 13, wordWrap: wordWrap ? 'on' : 'off' }}
+              options={{ minimap: { enabled: false }, fontSize: 13, wordWrap: wordWrap ? 'on' : 'off', editContext: !touchInput }}
             />
           </div>
 
